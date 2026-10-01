@@ -26,6 +26,12 @@ permissions:
   copilot-requests: write
 timeout-minutes: 60
 
+engine:
+  id: copilot
+  env:
+    COPILOT_PROVIDER_API_KEY: ${{ secrets.COPILOT_PROVIDER_API_KEY }}
+    COPILOT_PROVIDER_BEARER_TOKEN: ${{ secrets.COPILOT_PROVIDER_BEARER_TOKEN }}
+
 network:
   allowed:
     - defaults
@@ -81,6 +87,10 @@ When the Copilot CLI release pin is bumped, the schemas may change in ways the c
 Follow these steps exactly. You have a maximum of **3 attempts** to get `mvn verify` passing.
 
 ### Step 0: Setup
+
+Configure at least one of the `COPILOT_PROVIDER_API_KEY` or
+`COPILOT_PROVIDER_BEARER_TOKEN` Actions secrets in the repository before running
+this workflow. Forks do not inherit these secrets from their parent repository.
 
 Check out the branch and ensure the environment is ready:
 
