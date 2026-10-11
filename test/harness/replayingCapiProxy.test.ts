@@ -81,6 +81,34 @@ describe("ReplayingCapiProxy", () => {
     return yaml.parse(content) as NormalizedData;
   }
 
+  test("validates registered GitHub identities before replay configuration", async () => {
+    const proxy = new ReplayingCapiProxy("http://localhost");
+    proxy.setCopilotUserByToken("owner-token", { login: "owner", id: 42 });
+    proxy.setCopilotUserByToken("other-token", { login: "other", id: 99 });
+    proxy.setCopilotUserByToken("unresolved-token", { login: "unresolved" });
+    const address = await proxy.start();
+    try {
+      for (const [token, id, login] of [
+        ["owner-token", 42, "owner"],
+        ["other-token", 99, "other"],
+      ] as const) {
+        const response = await fetch(`${address}/user`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ id, login, type: "User" });
+      }
+      for (const token of ["unknown-token", "unresolved-token"]) {
+        const response = await fetch(`${address}/user`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        expect(response.status).toBe(401);
+      }
+    } finally {
+      await proxy.stop();
+    }
+  });
+
   test("does not write file when no chat completion exchanges", async () => {
     const outputPath = path.join(tempDir, "output.yaml");
     const proxy = new ReplayingCapiProxy(
@@ -463,7 +491,8 @@ Always include PINEAPPLE_COCONUT_42.
     ]);
 
     const result = await readYamlOutput(outputPath);
-    expect(result.conversations[0].messages[0].content).toBe(`<skill-context name="test-skill">
+    expect(result.conversations[0].messages[0].content)
+      .toBe(`<skill-context name="test-skill">
 Base directory for this skill: ${workingDirPlaceholder}/.test_skills/test-skill
 
 # Test Skill Instructions
@@ -803,6 +832,57 @@ Always include PINEAPPLE_COCONUT_42.
       });
     }
 
+    test("replay-only mode rejects cache misses without contacting the upstream", async () => {
+      let upstreamRequests = 0;
+      const upstream = http.createServer((_request, response) => {
+        upstreamRequests++;
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ choices: [] }));
+      });
+      await new Promise<void>((resolve) =>
+        upstream.listen(0, "127.0.0.1", resolve),
+      );
+      const address = upstream.address();
+      if (!address || typeof address === "string") {
+        throw new Error("Upstream test server did not expose a TCP port.");
+      }
+
+      const cachePath = path.join(tempDir, "cache.yaml");
+      await writeFile(
+        cachePath,
+        yaml.stringify({
+          models: ["test-model"],
+          conversations: [],
+        } satisfies NormalizedData),
+      );
+      const proxy = new ReplayingCapiProxy(`http://127.0.0.1:${address.port}`);
+      await proxy.updateConfig({
+        filePath: cachePath,
+        workDir,
+        backend: "capi",
+        replayOnly: true,
+      });
+      const proxyUrl = await proxy.start();
+
+      try {
+        const response = await makeRequest(proxyUrl, "/chat/completions", {
+          body: {
+            model: "test-model",
+            messages: [{ role: "user", content: "cache miss" }],
+          },
+        });
+
+        expect(response.status).toBe(500);
+        expect(response.body).toBe("Proxy error");
+        expect(upstreamRequests).toBe(0);
+      } finally {
+        await proxy.stop(true);
+        await new Promise<void>((resolve, reject) =>
+          upstream.close((error) => (error ? reject(error) : resolve())),
+        );
+      }
+    });
+
     test.each([
       ["should_accept_blob_attachments", "pixel.png"],
       ["vision_disabled_then_enabled_via_setmodel", "test.png"],
@@ -1002,7 +1082,9 @@ Always include PINEAPPLE_COCONUT_42.
 
     test("matches shell tool results with shell ID completion markers", async () => {
       const originalShellConfig =
-        process.platform === "win32" ? ShellConfig.powerShell : ShellConfig.bash;
+        process.platform === "win32"
+          ? ShellConfig.powerShell
+          : ShellConfig.bash;
       const cachePath = path.join(tempDir, "cache.yaml");
       const cacheContent = yaml.stringify({
         models: ["test-model"],
@@ -1680,6 +1762,53 @@ Always include PINEAPPLE_COCONUT_42.
       }
     });
 
+    test("streaming preserves tool choices from recorded multi-client traffic", async () => {
+      const proxy = new ReplayingCapiProxy("http://localhost:9999");
+      await proxy.updateConfig({
+        filePath: path.resolve(
+          __dirname,
+          "../snapshots/multi_client/both_clients_see_tool_request_and_completion_events.yaml",
+        ),
+        workDir,
+        backend: "capi",
+        replayOnly: true,
+      });
+      const proxyUrl = await proxy.start();
+      try {
+        const response = await makeRequest(proxyUrl, "/chat/completions", {
+          body: {
+            model: "claude-sonnet-5",
+            messages: [
+              { role: "system", content: "Application prompt" },
+              {
+                role: "user",
+                content:
+                  "Use the magic_number tool with seed 'hello' and tell me the result",
+              },
+            ],
+            stream: true,
+          },
+        });
+        expect(response.status).toBe(200);
+        const chunks = response.body
+          .split("\n")
+          .filter((line) => line.startsWith("data: {"))
+          .map((line) => JSON.parse(line.slice(6)) as ChatCompletionChunk);
+        const calls = chunks.flatMap(
+          (chunk) => chunk.choices[0].delta.tool_calls ?? [],
+        );
+        expect(calls.map((call) => call.function?.name)).toEqual([
+          "report_intent",
+          "magic_number",
+        ]);
+        expect(calls.map((call) => call.index)).toEqual([0, 1]);
+        expect(JSON.parse(calls[1].function!.arguments!)).toEqual({ seed: "hello" });
+        expect(chunks.at(-1)?.choices[0].finish_reason).toBe("tool_calls");
+      } finally {
+        await proxy.stop();
+      }
+    });
+
     test("returns streaming response when stream: true", async () => {
       const cachePath = path.join(tempDir, "cache.yaml");
       const cacheContent = yaml.stringify({
@@ -1761,7 +1890,9 @@ Always include PINEAPPLE_COCONUT_42.
           const parsed = JSON.parse(response.body) as {
             data: Array<{ id: string }>;
           };
-          expect(parsed.data.map((model) => model.id)).toEqual(["claude-sonnet-5"]);
+          expect(parsed.data.map((model) => model.id)).toEqual([
+            "claude-sonnet-5",
+          ]);
         } finally {
           await proxy.stop();
         }

@@ -66,10 +66,16 @@ from .canvas import (
     CanvasProviderIdentity,
     ExtensionInfo,
 )
-from .copilot_request_handler import CopilotRequestHandler, create_copilot_request_adapter
+from .copilot_request_handler import (
+    CopilotRequestHandler,
+    _CopilotRequestAdapterHandler,
+    create_copilot_request_adapter,
+)
 from .generated.rpc import (
     ClientGlobalApiHandlers,
     ClientSessionApiHandlers,
+    DiagnosticsConfiguration,
+    ExtensionLaunchProviderHandler,
     GitHubTelemetryNotification,
     GitHubTokenAcquireReason,
     GitHubTokenAcquireRequest,
@@ -89,6 +95,11 @@ from .generated.rpc import (
 from .generated.session_events import (
     SessionEvent,
     session_event_from_dict,
+)
+from .host import AhpHost, AhpHostOptions, _AhpHostManager
+from .installation_confirmation import (
+    InstallationConfirmationHandler,
+    _InstallationConfirmationAdapter,
 )
 from .session import (
     AutoModeSwitchHandler,
@@ -812,6 +823,8 @@ class _CopilotClientOptions:
     github_token: str | None = None
     base_directory: str | None = None
     builtin_plugin_directories: tuple[str, ...] = ()
+    extension_launch_provider: ExtensionLaunchProviderHandler | None = None
+    installation_confirmation_handler: InstallationConfirmationHandler | None = None
     use_logged_in_user: bool | None = None
     telemetry: TelemetryConfig | None = None
     session_fs: SessionFsConfig | None = None
@@ -1413,6 +1426,7 @@ HandlerUnsubcribe = Callable[[], None]
 # Servers reporting a version below this are rejected.
 _MIN_PROTOCOL_VERSION = 3
 _RUNTIME_SHUTDOWN_TIMEOUT_SECONDS = 10
+_CLI_PROCESS_GRACEFUL_EXIT_TIMEOUT_SECONDS = 10
 _CLI_PROCESS_EXIT_TIMEOUT_SECONDS = 5
 
 
@@ -1567,6 +1581,8 @@ class CopilotClient:
         github_token: str | None = None,
         base_directory: str | None = None,
         builtin_plugin_directories: Sequence[str] | None = None,
+        extension_launch_provider: ExtensionLaunchProviderHandler | None = None,
+        installation_confirmation_handler: InstallationConfirmationHandler | None = None,
         use_logged_in_user: bool | None = None,
         telemetry: TelemetryConfig | None = None,
         session_fs: SessionFsConfig | None = None,
@@ -1606,6 +1622,14 @@ class CopilotClient:
             builtin_plugin_directories: Absolute paths to trusted plugin
                 directories bundled by the host. When non-empty, the complete
                 set is registered during startup before sessions can be created.
+            extension_launch_provider: Connection-level extension launch profile
+                provider. When set, it is registered during startup before any
+                session can be created.
+            installation_confirmation_handler: Experimental connection-global
+                human review handler for ``installations.confirm``. Receives the
+                typed request and independent request/connection cancellation
+                signals, and returns only an explicit decision. This does not
+                enable installation capabilities.
             use_logged_in_user: Use the logged-in user for authentication.
                 ``None`` (default) resolves to ``True`` unless ``github_token``
                 is set.
@@ -1659,6 +1683,8 @@ class CopilotClient:
             github_token=github_token,
             base_directory=base_directory,
             builtin_plugin_directories=tuple(builtin_plugin_directories or ()),
+            extension_launch_provider=extension_launch_provider,
+            installation_confirmation_handler=installation_confirmation_handler,
             use_logged_in_user=use_logged_in_user,
             telemetry=telemetry,
             session_fs=session_fs,
@@ -1756,6 +1782,9 @@ class CopilotClient:
         self._start_lock = asyncio.Lock()
         self._sessions: dict[str, CopilotSession] = {}
         self._sessions_lock = threading.Lock()
+        self._ahp_hosts = _AhpHostManager(
+            self._get_session, self.create_session, self.resume_session
+        )
         self._github_token_providers: dict[str, _GitHubTokenProviderRegistration] = {}
         self._github_token_providers_lock = threading.Lock()
         self._github_token_provider_adapter = _GitHubTokenProviderAdapter(self)
@@ -1772,6 +1801,8 @@ class CopilotClient:
             _validate_session_fs_config(options.session_fs)
         self._session_fs_config = options.session_fs
         self._request_handler = options.request_handler
+        self._llm_inference_adapter: _CopilotRequestAdapterHandler | None = None
+        self._installation_confirmation_adapter: _InstallationConfirmationAdapter | None = None
 
     def _resolve_runtime_entrypoint(
         self,
@@ -1975,6 +2006,9 @@ class CopilotClient:
                 start_time,
             )
 
+            if self._options.extension_launch_provider is not None:
+                await self.rpc.register_extension_launch_provider()
+
             if self._options.builtin_plugin_directories:
                 assert self._client is not None
                 try:
@@ -2046,8 +2080,8 @@ class CopilotClient:
         This method performs graceful cleanup:
         1. Closes all active sessions (releases in-memory resources)
         2. Requests runtime shutdown for SDK-owned CLI processes
-        3. Closes the JSON-RPC connection
-        4. Terminates the CLI server process (if spawned by this client)
+        3. Closes owned stdio input and waits for host cleanup and natural exit
+        4. Closes the JSON-RPC connection and terminates any remaining owned process
 
         Note: session data on disk is preserved, so sessions can be resumed
         later. To permanently remove session data before stopping, call
@@ -2064,6 +2098,11 @@ class CopilotClient:
             ...         print(f"Cleanup error: {error.message}")
         """
         errors: list[StopError] = []
+        if self._installation_confirmation_adapter is not None:
+            self._installation_confirmation_adapter.close_connection()
+        self._ahp_hosts.disconnect()
+        if self._llm_inference_adapter is not None:
+            self._llm_inference_adapter.cancel_pending()
 
         # Atomically take ownership of all sessions and clear the dict
         # so no other thread can access them
@@ -2110,11 +2149,32 @@ class CopilotClient:
                 )
                 errors.append(StopError(message=f"Failed to gracefully shut down runtime: {e}"))
 
+        # Host telemetry is finalized after stdio EOF, not the shutdown response.
+        # Keep the readers alive while the child drains its final output.
+        if (
+            self._cli_process is not None
+            and not self._is_external_server
+            and isinstance(self._connection, StdioRuntimeConnection)
+            and self._cli_process.poll() is None
+        ):
+            try:
+                if self._cli_process.stdin is not None:
+                    self._cli_process.stdin.close()
+                await asyncio.to_thread(
+                    self._cli_process.wait,
+                    timeout=_CLI_PROCESS_GRACEFUL_EXIT_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired:
+                logger.debug("Timed out waiting for graceful CLI exit; terminating the process")
+            except OSError:
+                logger.debug("Error while closing Copilot CLI stdin", exc_info=True)
+
         # Close client
         if self._client:
             await self._client.stop()
             self._client = None
         self._rpc = None
+        self._installation_confirmation_adapter = None
 
         # Clear models cache
         async with self._models_cache_lock:
@@ -2123,7 +2183,7 @@ class CopilotClient:
         # Dispose the in-process FFI host and release the loaded native library.
         if self._ffi_host is not None:
             try:
-                self._ffi_host.dispose()
+                await asyncio.to_thread(self._ffi_host.dispose)
             except Exception:
                 logger.debug("Error while disposing in-process FFI host", exc_info=True)
             self._ffi_host = None
@@ -2137,15 +2197,7 @@ class CopilotClient:
                 logger.debug("Error while closing Copilot runtime transport", exc_info=True)
             self._process = None
 
-        # Terminate CLI process (only if we spawned it).
-        #
-        # Per the runtime.shutdown contract, the runtime completes all cleanup
-        # *before* responding and then leaves termination to the caller ("callers
-        # may then terminate the owned runtime process"). It deliberately keeps
-        # its JSON-RPC server alive to send the response and does not self-exit,
-        # so there is no point waiting a grace window for a self-exit that will
-        # never come. Once shutdown has completed (or failed) we terminate the
-        # child immediately and only wait to reap it.
+        # Terminate and reap an owned process that did not exit gracefully.
         if self._cli_process and not self._is_external_server:
             poll = getattr(self._cli_process, "poll", None)
             is_running = poll is None or poll() is None
@@ -2198,6 +2250,12 @@ class CopilotClient:
             ... except asyncio.TimeoutError:
             ...     await client.force_stop()
         """
+        if self._installation_confirmation_adapter is not None:
+            self._installation_confirmation_adapter.close_connection()
+        self._ahp_hosts.disconnect()
+        if self._llm_inference_adapter is not None:
+            self._llm_inference_adapter.cancel_pending()
+
         # Clear sessions immediately without trying to destroy them
         with self._sessions_lock:
             sessions = list(self._sessions.values())
@@ -2210,7 +2268,8 @@ class CopilotClient:
         # Close the transport first to signal the server immediately.
         # For external servers (TCP), this closes the socket.
         # For spawned processes (stdio), this kills the process.
-        if self._process is not None or self._cli_process is not None:
+        # The FFI adapter is disposed off-thread below.
+        if self._ffi_host is None and (self._process is not None or self._cli_process is not None):
             try:
                 if self._is_external_server:
                     if self._process is not None:
@@ -2230,7 +2289,7 @@ class CopilotClient:
         # Force-dispose the in-process FFI host before tearing down JSON-RPC.
         if self._ffi_host is not None:
             try:
-                self._ffi_host.dispose()
+                await asyncio.to_thread(self._ffi_host.dispose)
             except Exception:
                 logger.debug("Error while force-disposing in-process FFI host", exc_info=True)
             self._ffi_host = None
@@ -2246,6 +2305,7 @@ class CopilotClient:
                 )
             self._client = None
         self._rpc = None
+        self._installation_confirmation_adapter = None
 
         # Clear models cache
         async with self._models_cache_lock:
@@ -2286,6 +2346,7 @@ class CopilotClient:
         excluded_builtin_agents: list[str] | None = None,
         session_limits: SessionLimitsConfig | None = None,
         skip_custom_instructions: bool | None = None,
+        refresh_custom_instructions: bool | None = None,
         custom_agents_local_only: bool | None = None,
         coauthor_enabled: bool | None = None,
         manage_schedule_enabled: bool | None = None,
@@ -2293,6 +2354,7 @@ class CopilotClient:
         streaming: bool | None = None,
         include_sub_agent_streaming_events: bool | None = None,
         mcp_servers: dict[str, MCPServerConfig] | None = None,
+        diagnostics: DiagnosticsConfiguration | None = None,
         mcp_oauth_token_storage: Literal["persistent", "in-memory"] | None = None,
         auth_client_id_metadata_url: str | None = None,
         embedding_cache_storage: Literal["persistent", "in-memory"] | None = None,
@@ -2419,6 +2481,11 @@ class CopilotClient:
                 name is configured.
             session_limits: **Experimental.** Limits applied to this session's
                 current accounting window.
+            refresh_custom_instructions: When True, invalidates the process-wide
+                custom-instruction discovery cache before constructing this new
+                session. Omitted or False retains the cache. Other sessions in this
+                runtime may observe updated instructions on later turns or discovery.
+                This does not watch files or enable disabled instruction loading.
             model_capabilities: Override individual model capabilities resolved by the runtime.
             streaming: Whether to enable streaming responses.
             include_sub_agent_streaming_events: Whether to include sub-agent streaming
@@ -2686,7 +2753,7 @@ class CopilotClient:
         # Add working directory if provided
         if working_directory:
             payload["workingDirectory"] = working_directory
-        if additional_directories:
+        if additional_directories is not None:
             payload["additionalDirectories"] = additional_directories
 
         # Add streaming option if provided
@@ -2729,6 +2796,8 @@ class CopilotClient:
             payload["excludedBuiltinAgents"] = excluded_builtin_agents
         if session_limits is not None:
             payload["sessionLimits"] = _session_limits_to_wire(session_limits)
+        if refresh_custom_instructions is not None:
+            payload["refreshCustomInstructions"] = refresh_custom_instructions
 
         # Add model capabilities override if provided
         if model_capabilities:
@@ -2737,6 +2806,8 @@ class CopilotClient:
         # Add MCP servers configuration if provided
         if mcp_servers:
             payload["mcpServers"] = _mcp_servers_to_wire(mcp_servers)
+        if diagnostics is not None:
+            payload["diagnostics"] = diagnostics.to_dict()
         # Mode "empty" defaults MCP OAuth token storage to in-memory; caller wins.
         mcp_oauth_token_storage = _mcp_oauth_token_storage_default(mode, mcp_oauth_token_storage)
         if mcp_oauth_token_storage is not None:
@@ -3032,6 +3103,7 @@ class CopilotClient:
         self._commit_github_token_provider(
             session.session_id, github_token_provider_registration_id
         )
+        self._ahp_hosts.capture(session, payload)
 
         log_timing(
             logger,
@@ -3080,6 +3152,7 @@ class CopilotClient:
         streaming: bool | None = None,
         include_sub_agent_streaming_events: bool | None = None,
         mcp_servers: dict[str, MCPServerConfig] | None = None,
+        diagnostics: DiagnosticsConfiguration | None = None,
         mcp_oauth_token_storage: Literal["persistent", "in-memory"] | None = None,
         auth_client_id_metadata_url: str | None = None,
         embedding_cache_storage: Literal["persistent", "in-memory"] | None = None,
@@ -3116,6 +3189,7 @@ class CopilotClient:
         github_token_provider: GitHubTokenProvider | None = None,
         remote_session: RemoteSessionMode | None = None,
         continue_pending_work: bool | None = None,
+        suppress_resume_event: bool | None = None,
         canvases: list[CanvasDeclaration] | None = None,
         request_canvas_renderer: bool | None = None,
         request_extensions: bool | None = None,
@@ -3276,6 +3350,8 @@ class CopilotClient:
                 tool calls or permission prompts that were still pending when the
                 session was last suspended. When False (the default), the runtime
                 treats pending work as interrupted on resume.
+            suppress_resume_event: When True, skips emitting the session.resume
+                event when attaching to an existing session. Defaults to False.
             feature_flags: Feature-flag values resolved by the host to apply
                 on resume. Sent on the wire as ``featureFlags``.
             exp_assignments: ExP assignment ("flight") data injected by a
@@ -3493,7 +3569,7 @@ class CopilotClient:
 
         if working_directory:
             payload["workingDirectory"] = working_directory
-        if additional_directories:
+        if additional_directories is not None:
             payload["additionalDirectories"] = additional_directories
         if config_directory:
             payload["configDir"] = config_directory
@@ -3517,9 +3593,13 @@ class CopilotClient:
         if continue_pending_work is not None:
             payload["continuePendingWork"] = continue_pending_work
 
-        # TODO: disable_resume is not a keyword arg yet; keeping for future use
+        if suppress_resume_event is not None:
+            payload["disableResume"] = suppress_resume_event
+
         if mcp_servers:
             payload["mcpServers"] = _mcp_servers_to_wire(mcp_servers)
+        if diagnostics is not None:
+            payload["diagnostics"] = diagnostics.to_dict()
         # Mode "empty" defaults MCP OAuth token storage to in-memory; caller wins.
         mcp_oauth_token_storage = _mcp_oauth_token_storage_default(mode, mcp_oauth_token_storage)
         if mcp_oauth_token_storage is not None:
@@ -3719,6 +3799,7 @@ class CopilotClient:
             included_builtin_skills,
         )
         self._commit_github_token_provider(session_id, github_token_provider_registration_id)
+        self._ahp_hosts.capture(session, payload)
 
         log_timing(
             logger,
@@ -3728,6 +3809,22 @@ class CopilotClient:
             session_id=session_id,
         )
         return session
+
+    async def start_ahp_host(self, options: AhpHostOptions) -> AhpHost:
+        """Start an experimental, connection-owned in-process AHP listener.
+
+        Factories preserve host-selected settings while adding application
+        callbacks. Stopping the host releases participation, not session ownership.
+        If canceled during startup, cleanup continues on the owning connection
+        and disposes the listener once startup settles.
+        """
+        if options is None or (options.local_server is None and options.github_environment is None):
+            raise ValueError("At least one of local_server or github_environment is required")
+        if self._state != "connected":
+            await self.start()
+        if self._client is None:
+            raise RuntimeError("Client not connected")
+        return await self._ahp_hosts.start(self._client, options)
 
     async def ping(self, message: str | None = None) -> PingResponse:
         """
@@ -4415,6 +4512,8 @@ class CopilotClient:
         # credentials don't leak through a shared keytar store.
         if opts.mode == "empty":
             env["COPILOT_DISABLE_KEYTAR"] = "1"
+        if opts.mode != "empty":
+            env["COPILOT_RUNTIME_PROCESS_FILE_LOGGING"] = "1"
 
         if self._effective_connection_token:
             env["COPILOT_CONNECTION_TOKEN"] = self._effective_connection_token
@@ -4852,9 +4951,10 @@ class CopilotClient:
     def _register_client_global_handlers(self) -> None:
         if not self._client:
             return
-        llm_inference_adapter = None
+        self._llm_inference_adapter = None
+        self._installation_confirmation_adapter = None
         if self._request_handler is not None:
-            llm_inference_adapter = create_copilot_request_adapter(
+            self._llm_inference_adapter = create_copilot_request_adapter(
                 self._request_handler,
                 lambda: self._rpc.llm_inference if self._rpc is not None else None,
             )
@@ -4865,10 +4965,24 @@ class CopilotClient:
             self._client,
             ClientGlobalApiHandlers(
                 hooks=_HooksAdapter(self._get_session),
-                llm_inference=llm_inference_adapter,
+                extension_launch_provider=self._options.extension_launch_provider,
+                llm_inference=self._llm_inference_adapter,
                 git_hub_telemetry=github_telemetry_adapter,
                 git_hub_token=self._github_token_provider_adapter,
             ),
+        )
+        self._installation_confirmation_adapter = _InstallationConfirmationAdapter(
+            self._client,
+            self._options.installation_confirmation_handler,
+        )
+        self._installation_confirmation_adapter.register()
+        self._client.set_request_handler("host.materializeSession", self._ahp_hosts.materialize)
+        self._client.set_notification_method_handler(
+            "host.sessionReleased",
+            lambda params: self._ahp_hosts.notification("host.sessionReleased", params),
+        )
+        self._client.set_notification_method_handler(
+            "host.exited", lambda params: self._ahp_hosts.notification("host.exited", params)
         )
 
     def _register_github_token_provider(
@@ -4885,15 +4999,21 @@ class CopilotClient:
 
     def _handle_connection_close(self) -> None:
         self._state = "disconnected"
+        if self._installation_confirmation_adapter is not None:
+            self._installation_confirmation_adapter.close_connection()
         with self._sessions_lock:
             sessions = list(self._sessions.values())
         with self._github_token_providers_lock:
             self._github_token_providers.clear()
         client = self._client
+        llm_inference_adapter = self._llm_inference_adapter
         loop = client._loop if client is not None else None
         if loop is not None and not loop.is_closed():
 
             def cancel_pending_external_tools() -> None:
+                self._ahp_hosts.disconnect()
+                if llm_inference_adapter is not None:
+                    llm_inference_adapter.cancel_pending()
                 for session in sessions:
                     session._cancel_pending_external_tools()
 

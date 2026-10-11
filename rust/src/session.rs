@@ -144,6 +144,94 @@ struct IdleWaiter {
     first_assistant_message_seen: bool,
 }
 
+fn structured_output_error(message: impl Into<String>) -> Error {
+    Error::with_message(
+        ErrorKind::Session(SessionErrorKind::AgentError),
+        message.into(),
+    )
+}
+
+fn is_structured_output_event(event: &SessionEvent) -> bool {
+    matches!(
+        event.parsed_type(),
+        SessionEventType::UserMessage
+            | SessionEventType::AssistantMessage
+            | SessionEventType::SessionIdle
+            | SessionEventType::SessionError
+    )
+}
+
+fn is_root_agent_event(event: &SessionEvent) -> bool {
+    event.agent_id.as_deref().is_none_or(str::is_empty)
+}
+
+struct StructuredOutputState {
+    message_id: String,
+    started: bool,
+    final_message: Option<SessionEvent>,
+}
+
+impl StructuredOutputState {
+    fn observe(&mut self, event: SessionEvent) -> Result<Option<SessionEvent>, Error> {
+        if !is_root_agent_event(&event) {
+            return Ok(None);
+        }
+        match event.parsed_type() {
+            SessionEventType::UserMessage => {
+                let data: crate::session_events::UserMessageData =
+                    serde_json::from_value(event.data)?;
+                if data.message_id.as_deref() == Some(self.message_id.as_str()) {
+                    self.started = true;
+                }
+            }
+            SessionEventType::AssistantMessage => {
+                let data: crate::session_events::AssistantMessageData =
+                    serde_json::from_value(event.data.clone())?;
+                if data.originating_message_id.as_deref() == Some(self.message_id.as_str()) {
+                    self.started = true;
+                    self.final_message =
+                        if data.tool_requests.is_some_and(|tools| !tools.is_empty()) {
+                            None
+                        } else {
+                            Some(event)
+                        };
+                }
+            }
+            SessionEventType::SessionIdle if self.started => {
+                let data: SessionIdleData = serde_json::from_value(event.data)?;
+                if data.mode == Some(SessionMode::Autopilot) {
+                    return Ok(None);
+                }
+                if data.aborted == Some(true) {
+                    return Err(structured_output_error(
+                        "session aborted before structured output completed",
+                    ));
+                }
+                let result = self.final_message.take().ok_or_else(|| {
+                    structured_output_error("run completed without a structured assistant response")
+                })?;
+                let data: crate::session_events::AssistantMessageData =
+                    serde_json::from_value(result.data.clone())?;
+                if data.content.trim().is_empty() {
+                    return Err(structured_output_error(
+                        "run completed without a structured assistant response",
+                    ));
+                }
+                return Ok(Some(result));
+            }
+            SessionEventType::SessionError if self.started => {
+                let data: SessionErrorData = serde_json::from_value(event.data)?;
+                return Err(structured_output_error(format!(
+                    "session error: {}",
+                    data.message
+                )));
+            }
+            _ => {}
+        }
+        Ok(None)
+    }
+}
+
 /// RAII guard that clears the [`Session::idle_waiter`] slot on drop. Used
 /// by [`Session::send_and_wait`] to ensure the slot doesn't leak if the
 /// caller's future is cancelled (outer `tokio::time::timeout` / `select!`
@@ -170,6 +258,7 @@ struct PendingSessionRegistration {
     session_id: PendingSessionId,
     shutdown: CancellationToken,
     external_tools_shutdown: CancellationToken,
+    startup_tasks: Arc<StartupTasks>,
     disarmed: bool,
 }
 
@@ -202,6 +291,7 @@ impl PendingSessionRegistration {
             session_id: PendingSessionId::Known(session_id, token),
             shutdown,
             external_tools_shutdown,
+            startup_tasks: Arc::new(StartupTasks::default()),
             disarmed: false,
         }
     }
@@ -212,14 +302,31 @@ impl PendingSessionRegistration {
         stash: Arc<ParkingLotMutex<Option<(SessionId, crate::router::SessionRegistration)>>>,
         shutdown: CancellationToken,
         external_tools_shutdown: CancellationToken,
-    ) -> Self {
-        Self {
-            client,
-            session_id: PendingSessionId::Deferred(stash),
-            shutdown,
+    ) -> (Self, crate::jsonrpc::InlineResponseCallback) {
+        let guard = Self {
+            client: client.clone(),
+            session_id: PendingSessionId::Deferred(stash.clone()),
+            shutdown: shutdown.clone(),
             external_tools_shutdown,
+            startup_tasks: Arc::new(StartupTasks::default()),
             disarmed: false,
-        }
+        };
+        let callback: crate::jsonrpc::InlineResponseCallback = Box::new(move |response| {
+            let result = response.result.as_ref().ok_or_else(|| {
+                Error::with_message(ErrorKind::Json, "session.create response had no result")
+            })?;
+            let parsed: CreateSessionResult = serde_json::from_value(result.clone())?;
+            // Cancellation sets shutdown before inspecting this stash. Under the
+            // same lock, either registration wins and is cleaned up, or it is rejected.
+            let mut stashed = stash.lock();
+            if shutdown.is_cancelled() {
+                return Err(ErrorKind::Session(SessionErrorKind::EventLoopClosed).into());
+            }
+            let registration = client.register_session(&parsed.session_id);
+            *stashed = Some((parsed.session_id, registration));
+            Ok(())
+        });
+        (guard, callback)
     }
 
     fn registered_id(&self) -> Option<SessionId> {
@@ -236,9 +343,15 @@ impl PendingSessionRegistration {
         self.session_id = PendingSessionId::Known(session_id, token);
     }
 
-    async fn cleanup(mut self, event_loop: JoinHandle<()>) {
+    fn cancel(&self) {
         self.external_tools_shutdown.cancel();
         self.shutdown.cancel();
+        // Later callback spawns are rejected without polling their futures.
+        self.startup_tasks.abort();
+    }
+
+    async fn cleanup(mut self, event_loop: JoinHandle<()>) {
+        self.cancel();
         let _ = event_loop.await;
         if let Some(id) = self.registered_id() {
             if let PendingSessionId::Known(_, token) = self.session_id {
@@ -253,6 +366,7 @@ impl PendingSessionRegistration {
     }
 
     fn disarm(&mut self) {
+        self.startup_tasks.disarm();
         self.disarmed = true;
     }
 }
@@ -260,8 +374,7 @@ impl PendingSessionRegistration {
 impl Drop for PendingSessionRegistration {
     fn drop(&mut self) {
         if !self.disarmed {
-            self.external_tools_shutdown.cancel();
-            self.shutdown.cancel();
+            self.cancel();
             if let Some(id) = self.registered_id() {
                 if let PendingSessionId::Known(_, token) = self.session_id {
                     self.client.unregister_session_owned(&id, token);
@@ -271,6 +384,94 @@ impl Drop for PendingSessionRegistration {
                     self.client.unregister_session_owned(id, registration.token);
                 }
             }
+        }
+    }
+}
+
+type EventLoopSpawner = Box<
+    dyn FnOnce(
+            SessionId,
+            crate::router::SessionChannels,
+            Option<Arc<StartupTasks>>,
+        ) -> JoinHandle<()>
+        + Send,
+>;
+
+struct StartupTasks {
+    state: ParkingLotMutex<StartupTaskState>,
+}
+
+enum StartupTaskState {
+    Pending(Vec<tokio::task::AbortHandle>),
+    Disarmed,
+    Aborted,
+}
+
+impl Default for StartupTasks {
+    fn default() -> Self {
+        Self {
+            state: ParkingLotMutex::new(StartupTaskState::Pending(Vec::new())),
+        }
+    }
+}
+
+impl StartupTasks {
+    fn abort(&self) {
+        if let StartupTaskState::Pending(tasks) =
+            std::mem::replace(&mut *self.state.lock(), StartupTaskState::Aborted)
+        {
+            // Parents register before their nested handlers; cancel them before
+            // aborting children can wake their JoinHandle waiters.
+            for handle in tasks {
+                handle.abort();
+            }
+        }
+    }
+
+    fn disarm(&self) {
+        *self.state.lock() = StartupTaskState::Disarmed;
+    }
+}
+
+fn spawn_startup_tracked<F>(
+    future: F,
+    startup_tasks: Option<&Arc<StartupTasks>>,
+) -> Option<JoinHandle<F::Output>>
+where
+    F: std::future::Future + Send + 'static,
+    F::Output: Send + 'static,
+{
+    // Hold the cancellation lock across spawn and registration: another worker
+    // can poll the task immediately, before tokio::spawn returns.
+    let mut state = startup_tasks.map(|tasks| tasks.state.lock());
+    if matches!(state.as_deref(), Some(StartupTaskState::Aborted)) {
+        return None;
+    }
+    let task = tokio::spawn(future);
+    if let Some(StartupTaskState::Pending(tasks)) = state.as_deref_mut() {
+        tasks.push(task.abort_handle());
+    }
+    Some(task)
+}
+
+/// A create loop starts before the RPC when the client knows the session ID.
+/// Server-assigned IDs require waiting for the response to register the loop.
+/// The registration guard signals shutdown; inline dispatch never awaits user callbacks.
+enum CreateEventLoop {
+    Running {
+        event_loop: JoinHandle<()>,
+        token: crate::router::RegistrationToken,
+    },
+    Deferred(EventLoopSpawner),
+}
+
+impl CreateEventLoop {
+    async fn cleanup(self, pending_registration: PendingSessionRegistration) {
+        match self {
+            Self::Running { event_loop, .. } => {
+                pending_registration.cleanup(event_loop).await;
+            }
+            Self::Deferred(_) => drop(pending_registration),
         }
     }
 }
@@ -288,6 +489,7 @@ impl Drop for PendingSessionRegistration {
 /// without calling `destroy`, the `Drop` impl aborts the event loop and
 /// unregisters from the router as a best-effort safety net.
 pub struct Session {
+    ahp_creation_config: ParkingLotMutex<Option<serde_json::Value>>,
     id: SessionId,
     cwd: PathBuf,
     workspace_path: Option<PathBuf>,
@@ -328,6 +530,9 @@ pub struct Session {
     open_canvases: Arc<parking_lot::RwLock<Vec<OpenCanvasInstance>>>,
     /// Broadcast channel for runtime event subscribers — see [`Session::subscribe`].
     event_tx: tokio::sync::broadcast::Sender<SessionEvent>,
+    /// Resume-only queue retained until the first post-resume subscriber
+    /// catches up and switches to bounded live delivery.
+    resume_bootstrap: Option<Arc<crate::subscription::ResumeBootstrap>>,
     github_token_registration:
         ParkingLotMutex<Option<crate::github_token::GitHubTokenRegistration>>,
     /// Identity of this session's router registration.
@@ -335,6 +540,45 @@ pub struct Session {
 }
 
 impl Session {
+    pub(crate) fn validate_ahp_handoff(
+        &self,
+        client: &Client,
+        expected: &std::collections::HashMap<String, serde_json::Value>,
+        resume: bool,
+    ) -> Result<(), Error> {
+        let invalid = || {
+            Error::with_message(
+                ErrorKind::InvalidConfig,
+                "AHP callback must return the requested session from this client and preserve its configuration",
+            )
+        };
+        if !Arc::ptr_eq(&self.client.inner, &client.inner)
+            || self.shutdown.is_cancelled()
+            || !client
+                .inner
+                .router
+                .is_registered_owner(&self.id, self.registration_token)
+            || expected
+                .get("sessionId")
+                .and_then(serde_json::Value::as_str)
+                != Some(self.id.as_str())
+        {
+            return Err(invalid());
+        }
+        let actual = self.ahp_creation_config.lock().take();
+        // A retained original has no new materialization snapshot. The runtime
+        // validates its resident workspace without replacing application options.
+        if !(resume && actual.is_none()
+            || crate::ahp_host::contains_settings(
+                actual.as_ref(),
+                &serde_json::to_value(expected)?,
+            ))
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+
     /// Session ID assigned by the CLI.
     pub fn id(&self) -> &SessionId {
         &self.id
@@ -419,8 +663,24 @@ impl Session {
     /// loop or any combinator from `tokio_stream::StreamExt` /
     /// `futures::StreamExt`.
     ///
-    /// Each subscriber maintains its own queue. If a consumer cannot keep
-    /// up, the oldest events are dropped and `recv` returns
+    /// If resume started with no active [`PreparedSession`] subscriber, the
+    /// first subscription receives all retained routed startup events, durable
+    /// and ephemeral, in order before live delivery. Ownership is assigned
+    /// synchronously by the first `subscribe()` call, not by the first poll.
+    /// Later subscribers receive newly dispatched live events immediately,
+    /// even while the first subscriber is catching up.
+    ///
+    /// Bootstrap retention is unbounded until its owner catches up. Callers
+    /// that never subscribe or cannot catch up can retain arbitrarily many
+    /// events, so subscribe and drain promptly. Dropping the owner discards
+    /// its unread backlog; stopping the event loop releases an unclaimed
+    /// backlog. A claimed backlog can still be drained after shutdown.
+    /// This guarantee covers events routed to this session, not events lost
+    /// to overflow in the bounded client-global notification router.
+    ///
+    /// After the atomic bootstrap handoff, each subscriber maintains its own
+    /// finite queue. If a consumer cannot keep up, the oldest live events are
+    /// dropped and `recv` returns
     /// [`RecvErrorKind::Lagged`](crate::subscription::RecvErrorKind::Lagged)
     /// reporting the count of skipped events. Slow consumers do not block
     /// the session's event loop.
@@ -438,7 +698,10 @@ impl Session {
     /// # }
     /// ```
     pub fn subscribe(&self) -> crate::subscription::EventSubscription {
-        crate::subscription::EventSubscription::new(self.event_tx.subscribe())
+        match &self.resume_bootstrap {
+            Some(bootstrap) => bootstrap.subscribe(&self.event_tx),
+            None => crate::subscription::EventSubscription::new(self.event_tx.subscribe()),
+        }
     }
 
     /// The underlying Client (for advanced use cases).
@@ -543,6 +806,12 @@ impl Session {
         if let Some(display_prompt) = opts.display_prompt {
             params["displayPrompt"] = serde_json::to_value(display_prompt)?;
         }
+        if let Some(schema) = opts.response_schema {
+            params["responseFormat"] = serde_json::json!({
+                "type": "json_schema",
+                "jsonSchema": { "name": "response", "strict": true, "schema": schema }
+            });
+        }
         let trace_ctx = if opts.traceparent.is_some() || opts.tracestate.is_some() {
             TraceContext {
                 traceparent: opts.traceparent,
@@ -576,9 +845,17 @@ impl Session {
     /// returning the last `assistant.message` event captured during streaming.
     /// Times out after `MessageOptions::wait_timeout` (default 60 seconds).
     ///
-    /// Only one `send_and_wait` call may be active per session at a time.
-    /// Calling [`send`](Self::send) while a `send_and_wait`
-    /// is in flight will also return an error.
+    /// Child events with a non-empty `agentId` are still delivered to
+    /// [`subscribe`](Self::subscribe) but cannot supply the reply or complete
+    /// the wait. Root-agent events have no `agentId` (or an empty one).
+    /// The terminal event is queued to existing subscriptions before this wait
+    /// completes; subscribers need not have consumed it yet.
+    ///
+    /// Only one unformatted `send_and_wait` may be active per session. Calling
+    /// [`send`](Self::send) during that wait also returns an error. Schema-bearing
+    /// waits instead correlate by originating message ID and support concurrency.
+    /// They select the last root message without tool requests at non-autopilot
+    /// idle, failing on aborted idle, session errors after starting, or no result.
     ///
     /// # Cancel safety
     ///
@@ -593,6 +870,9 @@ impl Session {
     ) -> Result<Option<SessionEvent>, Error> {
         let total_start = Instant::now();
         let opts = opts.into();
+        if opts.response_schema.is_some() {
+            return self.send_and_wait_structured(opts).await.map(Some);
+        }
         let timeout_duration = opts.wait_timeout.unwrap_or(Duration::from_secs(60));
         let (tx, rx) = oneshot::channel();
 
@@ -646,6 +926,83 @@ impl Session {
                 Err(ErrorKind::Session(SessionErrorKind::Timeout(timeout_duration)).into())
             }
         }
+    }
+
+    /// Infer an output schema with the same `schemars` integration as custom tools,
+    /// then deserialize the final correlated root response at non-autopilot idle.
+    ///
+    /// Requires the `derive` feature. Provider schema restrictions apply. Serde
+    /// validates JSON/type compatibility, not every JSON Schema constraint.
+    /// Options must not specify a schema or immediate delivery. Dropping this
+    /// future or timing out unsubscribes the wait without aborting agent work.
+    #[cfg(feature = "derive")]
+    pub async fn send_and_wait_typed<T>(&self, opts: impl Into<MessageOptions>) -> Result<T, Error>
+    where
+        T: schemars::JsonSchema + serde::de::DeserializeOwned,
+    {
+        let mut opts = opts.into();
+        if opts.response_schema.is_some()
+            || opts.mode == Some(crate::types::DeliveryMode::Immediate)
+        {
+            return Err(Error::with_message(
+                ErrorKind::InvalidConfig,
+                "typed structured output cannot specify a response schema or immediate delivery",
+            ));
+        }
+        opts.response_schema = Some(crate::tool::schema_for::<T>());
+        let event = self.send_and_wait_structured(opts).await?;
+        let data: crate::session_events::AssistantMessageData = serde_json::from_value(event.data)?;
+        serde_json::from_str::<Option<T>>(&data.content)?.ok_or_else(|| {
+            structured_output_error("structured response was JSON null, not a result")
+        })
+    }
+
+    async fn send_and_wait_structured(&self, opts: MessageOptions) -> Result<SessionEvent, Error> {
+        let duration = opts.wait_timeout.unwrap_or(Duration::from_secs(60));
+        // Internal request observers must not claim the caller's resume backlog.
+        let mut events = crate::subscription::EventSubscription::new(self.event_tx.subscribe());
+        let wait = async {
+            let mut admission = Box::pin(self.send(opts));
+            let mut pending = Vec::new();
+            let message_id = loop {
+                tokio::select! {
+                    result = &mut admission => break result?,
+                    event = events.recv() => {
+                        let event = event.map_err(|err| structured_output_error(err.to_string()))?;
+                        if is_structured_output_event(&event) {
+                            pending.push(event);
+                        }
+                    }
+                    _ = self.shutdown.cancelled() =>
+                        return Err(structured_output_error("session closed before structured output completed")),
+                }
+            };
+            let mut state = StructuredOutputState {
+                message_id,
+                started: false,
+                final_message: None,
+            };
+            for event in pending {
+                if let Some(result) = state.observe(event)? {
+                    return Ok(result);
+                }
+            }
+            loop {
+                tokio::select! {
+                    event = events.recv() => {
+                        let event = event.map_err(|err| structured_output_error(err.to_string()))?;
+                        if let Some(result) = state.observe(event)? {
+                            return Ok(result);
+                        }
+                    }
+                    _ = self.shutdown.cancelled() =>
+                        return Err(structured_output_error("session closed before structured output completed")),
+                }
+            }
+        };
+        tokio::time::timeout(duration, wait)
+            .await
+            .map_err(|_| Error::from(ErrorKind::Session(SessionErrorKind::Timeout(duration))))?
     }
 
     /// Retrieve the session's timeline events.
@@ -1155,11 +1512,16 @@ impl Client {
     ///
     /// # Event delivery
     ///
-    /// Equivalent to `prepare_resume_session(config)?.start().await`, and
-    /// carries the same startup-event caveat documented on
-    /// [`create_session`](Self::create_session). Use
-    /// [`prepare_resume_session`](Self::prepare_resume_session) when
-    /// startup events matter.
+    /// Equivalent to `prepare_resume_session(config)?.start().await`. With no
+    /// active prepared subscriber at startup, routed events are retained in an
+    /// ordered, unbounded bootstrap queue. The first [`Session::subscribe`]
+    /// call claims that complete prefix and switches atomically to bounded
+    /// live delivery once caught up. Later subscriptions are live-only.
+    /// See [`Session::subscribe`] for ownership, cleanup, and router limits.
+    ///
+    /// Use [`prepare_resume_session`](Self::prepare_resume_session) when the
+    /// consumer must be installed before protocol activity begins or when
+    /// multiple startup observers are required.
     pub async fn resume_session(&self, config: ResumeSessionConfig) -> Result<Session, Error> {
         self.prepare_resume_session(config)?.start().await
     }
@@ -1171,13 +1533,20 @@ impl Client {
         shutdown: CancellationToken,
     ) -> Result<Session, Error> {
         let total_start = Instant::now();
-        // For cloud sessions, let the CLI/server assign the session id and
-        // register the session lazily once the response arrives. For non-cloud
-        // sessions we generate the id client-side (when the caller didn't
-        // supply one) so the session can be registered BEFORE the RPC — the
-        // CLI may issue session-scoped requests (e.g. sessionFs.writeFile for
-        // workspace metadata) during session.create processing, before it has
-        // sent the response.
+        let ahp_creation_config = if self
+            .inner
+            .ahp_host_sessions
+            .upgrade()
+            .is_some_and(|sessions| sessions.expects_session(config.session_id.as_ref()))
+        {
+            Some(crate::ahp_host::config_for_host(&config)?)
+        } else {
+            None
+        };
+        // Non-cloud IDs are generated locally when omitted by the caller.
+        // Start the loop before the RPC: session.create may issue
+        // sessionFs.writeFile for workspace metadata before its response.
+        // Cloud sessions without a caller-supplied ID must wait for the reply.
         let caller_session_id = config.session_id.clone();
         let use_server_generated_id = config.cloud.is_some() && caller_session_id.is_none();
         let local_session_id: Option<SessionId> = if use_server_generated_id {
@@ -1312,96 +1681,109 @@ impl Client {
         let open_canvases = Arc::new(parking_lot::RwLock::new(Vec::new()));
         let external_tools_shutdown = self.inner.rpc.connection_closed_token();
 
-        // For cloud sessions (use_server_generated_id), defer session
-        // registration to the inline callback so the read task registers
-        // the session synchronously the instant the response arrives.
-        // For non-cloud sessions, register up-front so the CLI can issue
-        // session-scoped requests during session.create processing.
-        let inline_stash: Arc<
-            ParkingLotMutex<Option<(SessionId, crate::router::SessionRegistration)>>,
-        > = Arc::new(ParkingLotMutex::new(None));
-
-        let inline_callback: Option<crate::jsonrpc::InlineResponseCallback> = if let Some(ref sid) =
-            local_session_id
-        {
-            let channels = self.register_session(sid);
-            *inline_stash.lock() = Some((sid.clone(), channels));
-            None
-        } else {
-            let client = self.clone();
-            let stash = inline_stash.clone();
-            let expected = caller_session_id.clone();
-            Some(Box::new(move |response| {
-                let result = response.result.as_ref().ok_or_else(|| {
-                    Error::with_message(ErrorKind::Json, "session.create response had no result")
-                })?;
-                let parsed: CreateSessionResult =
-                    serde_json::from_value(result.clone()).map_err(Error::from)?;
-                if let Some(requested) = expected.as_ref()
-                    && parsed.session_id != *requested
-                {
-                    return Err(ErrorKind::Session(SessionErrorKind::SessionIdMismatch {
-                        requested: requested.clone(),
-                        returned: parsed.session_id,
-                    })
-                    .into());
-                }
-                // Register and stash under a single stash-lock hold. The
-                // cancellation guard identifies the session to unregister by
-                // peeking this stash, so registering outside the lock would
-                // leave a window where a concurrent guard drop (caller
-                // cancellation) sees `None` and leaks the registration.
-                // `register_session` takes the router lock, never the stash
-                // lock, so there is no lock-order inversion here.
-                let mut stashed = stash.lock();
-                let registration = client.register_session(&parsed.session_id);
-                *stashed = Some((parsed.session_id, registration));
-                Ok(())
-            }))
+        let spawn_loop: EventLoopSpawner = {
+            let client = Client::from_inner(self.inner.clone());
+            let idle_waiter = idle_waiter.clone();
+            let capabilities = capabilities.clone();
+            let open_canvases = open_canvases.clone();
+            let event_tx = event_tx.clone();
+            let shutdown = shutdown.clone();
+            let external_tools_shutdown = external_tools_shutdown.clone();
+            Box::new(
+                move |session_id: SessionId,
+                      channels: crate::router::SessionChannels,
+                      startup_tasks: Option<Arc<StartupTasks>>| {
+                    spawn_event_loop(
+                        session_id,
+                        client,
+                        handlers,
+                        hooks,
+                        transforms,
+                        command_handlers,
+                        canvas_handler,
+                        session_fs_provider,
+                        bearer_token_providers,
+                        channels,
+                        idle_waiter,
+                        capabilities,
+                        open_canvases,
+                        event_tx,
+                        None,
+                        shutdown,
+                        external_tools_shutdown,
+                        startup_tasks,
+                    )
+                },
+            )
         };
 
-        // Armed for the whole startup sequence: any early return, and any
-        // drop of this future (caller cancellation), cancels the session
-        // token and unregisters whatever was registered on the router. For
-        // the cloud path the ID is only known once the inline callback has
-        // run, so the guard reads the stash at cleanup time.
-        let mut pending_registration = match local_session_id {
-            Some(ref sid) => {
-                let token = inline_stash
-                    .lock()
-                    .as_ref()
-                    .expect("session registration must exist")
-                    .1
-                    .token;
-                PendingSessionRegistration::new(
+        // The guard owns the registration through every error and caller
+        // cancellation path, including the deferred cloud callback.
+        let (inline_callback, mut pending_registration, event_loop, inline_stash) =
+            if let Some(ref sid) = local_session_id {
+                let registration = self.register_session(sid);
+                let token = registration.token;
+                let guard = PendingSessionRegistration::new(
                     self.clone(),
                     sid.clone(),
                     token,
                     shutdown.clone(),
                     external_tools_shutdown.clone(),
+                );
+                let event_loop = spawn_loop(
+                    sid.clone(),
+                    registration.channels,
+                    Some(guard.startup_tasks.clone()),
+                );
+                (
+                    None,
+                    guard,
+                    CreateEventLoop::Running { event_loop, token },
+                    None,
                 )
-            }
-            None => PendingSessionRegistration::deferred(
-                self.clone(),
-                inline_stash.clone(),
-                shutdown.clone(),
-                external_tools_shutdown.clone(),
-            ),
-        };
+            } else {
+                let inline_stash = Arc::new(ParkingLotMutex::new(None));
+                let (guard, callback) = PendingSessionRegistration::deferred(
+                    self.clone(),
+                    inline_stash.clone(),
+                    shutdown.clone(),
+                    external_tools_shutdown.clone(),
+                );
+                (
+                    Some(callback),
+                    guard,
+                    CreateEventLoop::Deferred(spawn_loop),
+                    Some(inline_stash),
+                )
+            };
 
         let rpc_start = Instant::now();
-        let result = self
+        let result = match self
             .call_with_inline_callback("session.create", Some(params), inline_callback)
-            .await?;
+            .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                event_loop.cleanup(pending_registration).await;
+                return Err(error);
+            }
+        };
         tracing::debug!(
             elapsed_ms = rpc_start.elapsed().as_millis(),
             "Client::create_session session creation request completed successfully"
         );
-        let create_result: CreateSessionResult = serde_json::from_value(result)?;
+        let create_result: CreateSessionResult = match serde_json::from_value(result) {
+            Ok(result) => result,
+            Err(error) => {
+                event_loop.cleanup(pending_registration).await;
+                return Err(error.into());
+            }
+        };
 
         if let Some(ref requested) = local_session_id
             && create_result.session_id != *requested
         {
+            event_loop.cleanup(pending_registration).await;
             return Err(ErrorKind::Session(SessionErrorKind::SessionIdMismatch {
                 requested: requested.clone(),
                 returned: create_result.session_id.clone(),
@@ -1409,31 +1791,25 @@ impl Client {
             .into());
         }
 
-        let (session_id, registration) = inline_stash
-            .lock()
-            .take()
-            .expect("session registration must have populated stash on success");
-        let channels = registration.channels;
-        let registration_token = registration.token;
-        pending_registration.resolve_to(session_id.clone(), registration_token);
-        let event_loop = spawn_event_loop(
-            session_id.clone(),
-            self.clone(),
-            handlers,
-            hooks,
-            transforms,
-            command_handlers,
-            canvas_handler,
-            session_fs_provider,
-            bearer_token_providers,
-            channels,
-            idle_waiter.clone(),
-            capabilities.clone(),
-            open_canvases.clone(),
-            event_tx.clone(),
-            shutdown.clone(),
-            external_tools_shutdown.clone(),
-        );
+        let (session_id, event_loop, registration_token) = match event_loop {
+            CreateEventLoop::Running { event_loop, token } => {
+                (create_result.session_id.clone(), event_loop, token)
+            }
+            CreateEventLoop::Deferred(spawn_loop) => {
+                let (session_id, registration) = inline_stash
+                    .expect("deferred create has a response stash")
+                    .lock()
+                    .take()
+                    .expect("session registration must have populated stash on success");
+                pending_registration.resolve_to(session_id.clone(), registration.token);
+                let event_loop = spawn_loop(
+                    session_id.clone(),
+                    registration.channels,
+                    Some(pending_registration.startup_tasks.clone()),
+                );
+                (session_id, event_loop, registration.token)
+            }
+        };
         tracing::debug!(
             elapsed_ms = setup_start.elapsed().as_millis(),
             session_id = %session_id,
@@ -1455,13 +1831,13 @@ impl Client {
             session_id = %session_id,
             "Client::create_session complete"
         );
-        pending_registration.disarm();
         let session = Session {
+            ahp_creation_config: ParkingLotMutex::new(ahp_creation_config),
             id: session_id,
             cwd: self.cwd().clone(),
             workspace_path: create_result.workspace_path,
             remote_url: create_result.remote_url,
-            client: self.clone(),
+            client: Client::from_inner(self.inner.clone()),
             event_loop: ParkingLotMutex::new(Some(event_loop)),
             shutdown,
             external_tools_shutdown,
@@ -1469,25 +1845,19 @@ impl Client {
             capabilities,
             open_canvases,
             event_tx,
+            resume_bootstrap: None,
             github_token_registration: ParkingLotMutex::new(github_token_registration),
             registration_token,
         };
-        apply_mode_post_create_patch(
-            &session,
+        let patch = build_mode_post_create_patch(
             mode,
             opt_skip_custom_instructions,
             opt_custom_agents_local_only,
             opt_coauthor_enabled,
             opt_manage_schedule_enabled,
             opt_included_builtin_skills,
-        )
-        .await?;
-        if let Some(registration) = session.github_token_registration.lock().as_ref() {
-            registration.claim(session.id.clone());
-        } else {
-            self.retire_github_token_provider(&session.id);
-        }
-        Ok(session)
+        );
+        finish_session_setup(session, pending_registration, patch).await
     }
 
     /// Resume an existing session on the CLI.
@@ -1507,6 +1877,16 @@ impl Client {
         shutdown: CancellationToken,
     ) -> Result<Session, Error> {
         let total_start = Instant::now();
+        let ahp_creation_config = if self
+            .inner
+            .ahp_host_sessions
+            .upgrade()
+            .is_some_and(|sessions| sessions.expects_session(Some(&config.session_id)))
+        {
+            Some(crate::ahp_host::resume_config_for_host(&config)?)
+        } else {
+            None
+        };
         let session_id = config.session_id.clone();
         if config.hooks_handler.is_some() && config.hooks.is_none() {
             config.hooks = Some(true);
@@ -1627,15 +2007,25 @@ impl Client {
 
         let capabilities = Arc::new(parking_lot::RwLock::new(SessionCapabilities::default()));
         let setup_start = Instant::now();
+        // Active prepared subscribers retain their existing bounded delivery.
+        let resume_bootstrap = (event_tx.receiver_count() == 0)
+            .then(|| crate::subscription::ResumeBootstrap::new(&event_tx));
         let registration = self.register_session(&session_id);
         let registration_token = registration.token;
         let channels = registration.channels;
         let idle_waiter = Arc::new(ParkingLotMutex::new(None));
         let open_canvases = Arc::new(parking_lot::RwLock::new(Vec::new()));
         let external_tools_shutdown = self.inner.rpc.connection_closed_token();
+        let registration = PendingSessionRegistration::new(
+            self.clone(),
+            session_id.clone(),
+            registration_token,
+            shutdown.clone(),
+            external_tools_shutdown.clone(),
+        );
         let event_loop = spawn_event_loop(
             session_id.clone(),
-            self.clone(),
+            Client::from_inner(self.inner.clone()),
             handlers,
             hooks,
             transforms,
@@ -1648,15 +2038,10 @@ impl Client {
             capabilities.clone(),
             open_canvases.clone(),
             event_tx.clone(),
+            resume_bootstrap.clone(),
             shutdown.clone(),
             external_tools_shutdown.clone(),
-        );
-        let mut registration = PendingSessionRegistration::new(
-            self.clone(),
-            session_id.clone(),
-            registration_token,
-            shutdown.clone(),
-            external_tools_shutdown.clone(),
+            Some(registration.startup_tasks.clone()),
         );
         tracing::debug!(
             elapsed_ms = setup_start.elapsed().as_millis(),
@@ -1746,13 +2131,13 @@ impl Client {
             session_id = %session_id,
             "Client::resume_session complete"
         );
-        registration.disarm();
         let session = Session {
+            ahp_creation_config: ParkingLotMutex::new(ahp_creation_config),
             id: session_id,
             cwd: self.cwd().clone(),
             workspace_path: resume_result.workspace_path,
             remote_url: resume_result.remote_url,
-            client: self.clone(),
+            client: Client::from_inner(self.inner.clone()),
             event_loop: ParkingLotMutex::new(Some(event_loop)),
             shutdown,
             external_tools_shutdown,
@@ -1760,25 +2145,19 @@ impl Client {
             capabilities,
             open_canvases,
             event_tx,
+            resume_bootstrap,
             github_token_registration: ParkingLotMutex::new(github_token_registration),
             registration_token,
         };
-        apply_mode_post_create_patch(
-            &session,
+        let patch = build_mode_post_create_patch(
             mode,
             opt_skip_custom_instructions,
             opt_custom_agents_local_only,
             opt_coauthor_enabled,
             opt_manage_schedule_enabled,
             opt_included_builtin_skills,
-        )
-        .await?;
-        if let Some(registration) = session.github_token_registration.lock().as_ref() {
-            registration.claim(session.id.clone());
-        } else {
-            self.retire_github_token_provider(&session.id);
-        }
-        Ok(session)
+        );
+        finish_session_setup(session, registration, patch).await
     }
 }
 
@@ -1804,9 +2183,11 @@ impl Client {
 /// * Dropping the [`start`](Self::start) future mid-flight cancels the
 ///   session token, unregisters the session from the router if it was
 ///   registered, and closes early subscriptions. A retry with the same
-///   session ID succeeds. Cleanup of already-spawned tasks is signalled,
-///   not awaited: `Drop` is synchronous and cannot await, so the event loop
-///   terminates promptly but not synchronously.
+///   session ID succeeds. Callbacks spawned during startup are aborted until
+///   all post-create/resume setup succeeds. After success, callbacks retain
+///   their established-session lifetime and may outlive the event loop.
+///   Cleanup is signalled, not awaited: `Drop` is synchronous and cannot await,
+///   so the event loop and callbacks terminate promptly but not synchronously.
 /// * A startup error from [`start`](Self::start) performs the same cleanup
 ///   and preserves the [`ErrorKind`] the equivalent
 ///   [`Client::create_session`] / [`Client::resume_session`] call has always
@@ -1818,8 +2199,8 @@ impl Client {
 ///
 /// # Buffering
 ///
-/// The broadcast buffer is finite —
-/// [`DEFAULT_EVENT_BUFFER_CAPACITY`] unless
+/// Subscriptions taken directly from this prepared handle use the finite
+/// broadcast buffer — [`DEFAULT_EVENT_BUFFER_CAPACITY`] unless
 /// [`SessionConfig::event_buffer_capacity`] /
 /// [`ResumeSessionConfig::event_buffer_capacity`] overrides it. Subscribers
 /// that fall behind observe
@@ -1827,6 +2208,10 @@ impl Client {
 /// to the event loop. Consumers that need a lossless view of a large
 /// startup burst must either configure a capacity that covers it or drain
 /// the subscription concurrently with [`start`](Self::start).
+///
+/// If a resume starts with no active prepared subscription, the eventual
+/// [`Session`] instead retains routed startup events in the unbounded,
+/// one-shot bootstrap queue documented on [`Session::subscribe`].
 ///
 /// # Server-assigned session IDs
 ///
@@ -1889,9 +2274,9 @@ impl PreparedSession {
     /// Create or resume the session on the CLI.
     ///
     /// This is where all protocol activity happens: config validation,
-    /// router registration, the `session.create` / `session.resume` RPC,
-    /// and the event loop spawn. Nothing observable occurs until this
-    /// future is first polled.
+    /// router registration, the event loop spawn (before the RPC when the ID
+    /// is known), and the `session.create` / `session.resume` RPC.
+    /// Nothing observable occurs until this future is first polled.
     ///
     /// # Errors
     ///
@@ -1910,16 +2295,15 @@ impl PreparedSession {
             event_tx,
             shutdown,
         } = self;
+        // The startup state machines exceed 16 KiB; boxing them keeps this
+        // future, and every public caller awaiting it, small enough for
+        // 2 MiB worker stacks and `clippy::large_futures`.
         match kind {
             PreparedKind::Create(config) => {
-                client
-                    .start_prepared_create(*config, event_tx, shutdown)
-                    .await
+                Box::pin(client.start_prepared_create(*config, event_tx, shutdown)).await
             }
             PreparedKind::Resume(config) => {
-                client
-                    .start_prepared_resume(*config, event_tx, shutdown)
-                    .await
+                Box::pin(client.start_prepared_resume(*config, event_tx, shutdown)).await
             }
         }
     }
@@ -1927,30 +2311,25 @@ impl PreparedSession {
 
 type CommandHandlerMap = HashMap<String, Arc<dyn CommandHandler>>;
 
-async fn apply_mode_post_create_patch(
-    session: &Session,
-    mode: crate::ClientMode,
-    opt_skip_custom_instructions: Option<bool>,
-    opt_custom_agents_local_only: Option<bool>,
-    opt_coauthor_enabled: Option<bool>,
-    opt_manage_schedule_enabled: Option<bool>,
-    opt_included_builtin_skills: Option<Vec<String>>,
-) -> Result<(), Error> {
-    let Some(patch) = build_mode_post_create_patch(
-        mode,
-        opt_skip_custom_instructions,
-        opt_custom_agents_local_only,
-        opt_coauthor_enabled,
-        opt_manage_schedule_enabled,
-        opt_included_builtin_skills,
-    ) else {
-        return Ok(());
-    };
-    if let Err(error) = session.rpc().options().update(patch).await {
+async fn finish_session_setup(
+    session: Session,
+    mut registration: PendingSessionRegistration,
+    patch: Option<crate::generated::api_types::SessionUpdateOptionsParams>,
+) -> Result<Session, Error> {
+    if let Some(patch) = patch
+        && let Err(error) = session.rpc().options().update(patch).await
+    {
+        registration.cancel();
         let _ = session.disconnect().await;
         return Err(error);
     }
-    Ok(())
+    if let Some(provider) = session.github_token_registration.lock().as_ref() {
+        provider.claim(session.id.clone());
+    } else {
+        session.client.retire_github_token_provider(&session.id);
+    }
+    registration.disarm();
+    Ok(session)
 }
 
 /// Builds the `session.options.update` patch applied immediately after a session
@@ -2056,8 +2435,10 @@ fn spawn_event_loop(
     capabilities: Arc<parking_lot::RwLock<SessionCapabilities>>,
     open_canvases: Arc<parking_lot::RwLock<Vec<OpenCanvasInstance>>>,
     event_tx: tokio::sync::broadcast::Sender<SessionEvent>,
+    resume_bootstrap: Option<Arc<crate::subscription::ResumeBootstrap>>,
     shutdown: CancellationToken,
     external_tools_shutdown: CancellationToken,
+    startup_tasks: Option<Arc<StartupTasks>>,
 ) -> JoinHandle<()> {
     let crate::router::SessionChannels {
         mut notifications,
@@ -2065,10 +2446,16 @@ fn spawn_event_loop(
     } = channels;
     let pending_external_tools: PendingExternalTools =
         Arc::new(ParkingLotMutex::new(HashMap::new()));
+    // Capture cleanup before spawning so even cancellation before the first
+    // task poll releases an unclaimed backlog.
+    let bootstrap_cleanup = resume_bootstrap
+        .as_ref()
+        .map(|bootstrap| bootstrap.cleanup_guard());
 
     let span = tracing::error_span!("session_event_loop", session_id = %session_id);
     tokio::spawn(
         async move {
+            let _bootstrap_cleanup = bootstrap_cleanup;
             loop {
                 // `mpsc::UnboundedReceiver::recv` and
                 // `CancellationToken::cancelled` are both cancel-safe per
@@ -2090,14 +2477,14 @@ fn spawn_event_loop(
                 // `handle_notification` is awaited inline because it only
                 // performs fast dispatch work; its slow interactive callbacks
                 // (permission/tool/elicitation) are themselves spawned as child
-                // tasks. All of these spawned tasks intentionally outlive the
-                // parent loop and own their own cleanup — RFD 400's "spawn
+                // tasks. After successful startup these tasks intentionally
+                // outlive the parent loop and own their own cleanup — RFD 400's "spawn
                 // background tasks to perform cancel-unsafe operations" pattern.
                 tokio::select! {
                     _ = shutdown.cancelled() => break,
                     Some(notification) = notifications.recv() => {
                         handle_notification(
-                            &session_id, &client, &handlers, &command_handlers, notification, &idle_waiter, &capabilities, &open_canvases, &event_tx, &shutdown, &external_tools_shutdown, &pending_external_tools,
+                            &session_id, &client, &handlers, &command_handlers, notification, &idle_waiter, &capabilities, &open_canvases, &event_tx, resume_bootstrap.as_ref(), &shutdown, &external_tools_shutdown, &pending_external_tools, startup_tasks.as_ref(),
                         ).await;
                     }
                     Some(request) = requests.recv() => {
@@ -2115,7 +2502,7 @@ fn spawn_event_loop(
                         let bearer_token_providers = bearer_token_providers.clone();
                         let request_id = request.id;
                         let method = request.method.clone();
-                        tokio::spawn(
+                        let _ = spawn_startup_tracked(
                             async move {
                                 let ctx = RequestDispatchContext {
                                     client: &client,
@@ -2141,6 +2528,7 @@ fn spawn_event_loop(
                                 }
                             }
                             .instrument(span),
+                            startup_tasks.as_ref(),
                         );
                     }
                     else => break,
@@ -2263,12 +2651,14 @@ async fn handle_notification(
     capabilities: &Arc<parking_lot::RwLock<SessionCapabilities>>,
     open_canvases: &Arc<parking_lot::RwLock<Vec<OpenCanvasInstance>>>,
     event_tx: &tokio::sync::broadcast::Sender<SessionEvent>,
+    resume_bootstrap: Option<&Arc<crate::subscription::ResumeBootstrap>>,
     shutdown: &CancellationToken,
     external_tools_shutdown: &CancellationToken,
     pending_external_tools: &PendingExternalTools,
+    startup_tasks: Option<&Arc<StartupTasks>>,
 ) {
     let dispatch_start = Instant::now();
-    let event = notification.event.clone();
+    let event = &notification.event;
     let event_type = event.parsed_type();
     if event_type == SessionEventType::PermissionRequested {
         tracing::debug!(
@@ -2280,10 +2670,13 @@ async fn handle_notification(
 
     // Signal send_and_wait if active. The lock is only contended when
     // a send_and_wait call is in flight (idle_waiter is Some).
+    let mut completion = None;
     match event_type {
         SessionEventType::AssistantMessage
         | SessionEventType::SessionIdle
-        | SessionEventType::SessionError => {
+        | SessionEventType::SessionError
+            if is_root_agent_event(event) =>
+        {
             let mut guard = idle_waiter.lock();
             if let Some(waiter) = guard.as_mut() {
                 match event_type {
@@ -2298,7 +2691,7 @@ async fn handle_notification(
                         }
                         waiter.last_assistant_message = Some(event.clone());
                     }
-                    SessionEventType::SessionIdle if is_autopilot_continuation_idle(&event) => {}
+                    SessionEventType::SessionIdle if is_autopilot_continuation_idle(event) => {}
                     SessionEventType::SessionIdle | SessionEventType::SessionError => {
                         if let Some(waiter) = guard.take() {
                             if event_type == SessionEventType::SessionIdle {
@@ -2307,7 +2700,7 @@ async fn handle_notification(
                                     session_id = %session_id,
                                     "Session::send_and_wait idle received"
                                 );
-                                let _ = waiter.tx.send(Ok(waiter.last_assistant_message));
+                                completion = Some((waiter.tx, Ok(waiter.last_assistant_message)));
                             } else {
                                 let error_msg = event
                                     .typed_data::<SessionErrorData>()
@@ -2320,10 +2713,13 @@ async fn handle_notification(
                                             .map(|s| s.to_string())
                                     })
                                     .unwrap_or_else(|| "session error".to_string());
-                                let _ = waiter.tx.send(Err(Error::with_message(
-                                    ErrorKind::Session(SessionErrorKind::AgentError),
-                                    error_msg,
-                                )));
+                                completion = Some((
+                                    waiter.tx,
+                                    Err(Error::with_message(
+                                        ErrorKind::Session(SessionErrorKind::AgentError),
+                                        error_msg,
+                                    )),
+                                ));
                             }
                         }
                     }
@@ -2364,10 +2760,15 @@ async fn handle_notification(
         }
     }
 
-    // Fan out the event to runtime subscribers (`Session::subscribe`). `send`
-    // only errors when there are no receivers, which is the normal case
-    // before any consumer subscribes.
-    let _ = event_tx.send(event.clone());
+    if let Some(bootstrap) = resume_bootstrap {
+        bootstrap.publish(event_tx, event.clone());
+    } else {
+        // No receivers is normal before any consumer subscribes.
+        let _ = event_tx.send(event.clone());
+    }
+    if let Some((tx, result)) = completion {
+        let _ = tx.send(result);
+    }
 
     tracing::debug!(
         elapsed_ms = dispatch_start.elapsed().as_millis(),
@@ -2420,7 +2821,7 @@ async fn handle_notification(
                 session_id = %sid,
                 request_id = %request_id
             );
-            tokio::spawn(
+            let _ = spawn_startup_tracked(
                 async move {
                     let handler_start = Instant::now();
                     let result = permission_handler
@@ -2475,6 +2876,7 @@ async fn handle_notification(
                     }
                 }
                 .instrument(span),
+                startup_tasks,
             );
         }
         SessionEventType::ExternalToolRequested => {
@@ -2493,7 +2895,7 @@ async fn handle_notification(
                             session_id = %sid,
                             request_id = %request_id
                         );
-                        tokio::spawn(
+                        let _ = spawn_startup_tracked(
                             async move {
                                 let rpc_start = Instant::now();
                                 let _ = client
@@ -2514,6 +2916,7 @@ async fn handle_notification(
                                 );
                             }
                             .instrument(span),
+                            startup_tasks,
                         );
                         return;
                     }
@@ -2547,7 +2950,7 @@ async fn handle_notification(
                 session_id = %sid,
                 request_id = %request_id
             );
-            tokio::spawn(
+            let _ = spawn_startup_tracked(
                 async move {
                     let guard = PendingExternalToolGuard {
                         request_id: guard_request_id,
@@ -2666,6 +3069,7 @@ async fn handle_notification(
                     );
                 }
                 .instrument(span),
+                startup_tasks,
             );
         }
         SessionEventType::UserInputRequested => {
@@ -2718,38 +3122,48 @@ async fn handle_notification(
                 session_id = %sid,
                 request_id = %request_id
             );
-            tokio::spawn(
+            let nested_startup_tasks = startup_tasks.cloned();
+            let _ = spawn_startup_tracked(
                 async move {
                     let cancel = ElicitationResult {
                         action: "cancel".to_string(),
                         content: None,
                     };
                     // Dispatch to a nested task so panics are caught as JoinErrors.
-                    let handler_task = tokio::spawn({
-                        let sid = sid.clone();
-                        let request_id = request_id.clone();
-                        let span = tracing::error_span!(
-                            "elicitation_callback",
-                            session_id = %sid,
-                            request_id = %request_id
-                        );
-                        async move {
-                            let handler_start = Instant::now();
-                            let response = elicitation_handler
-                                .handle(sid.clone(), request_id.clone(), request)
-                                .await;
-                            tracing::debug!(
-                                elapsed_ms = handler_start.elapsed().as_millis(),
+                    let handler_task = spawn_startup_tracked(
+                        {
+                            let sid = sid.clone();
+                            let request_id = request_id.clone();
+                            let span = tracing::error_span!(
+                                "elicitation_callback",
                                 session_id = %sid,
-                                request_id = %request_id,
-                                "ElicitationHandler::handle dispatch"
+                                request_id = %request_id
                             );
-                            response
-                        }
-                        .instrument(span)
-                    });
+                            async move {
+                                let handler_start = Instant::now();
+                                let response = elicitation_handler
+                                    .handle(sid.clone(), request_id.clone(), request)
+                                    .await;
+                                tracing::debug!(
+                                    elapsed_ms = handler_start.elapsed().as_millis(),
+                                    session_id = %sid,
+                                    request_id = %request_id,
+                                    "ElicitationHandler::handle dispatch"
+                                );
+                                response
+                            }
+                            .instrument(span)
+                        },
+                        nested_startup_tasks.as_ref(),
+                    );
+                    let Some(handler_task) = handler_task else {
+                        // Abandoned startup must not emit even a fallback cancellation RPC.
+                        return;
+                    };
                     let result = match handler_task.await {
                         Ok(r) => r,
+                        // Startup abort is not a handler failure: no fallback RPC.
+                        Err(error) if error.is_cancelled() => return,
                         Err(_) => cancel.clone(),
                     };
                     let rpc_start = Instant::now();
@@ -2786,6 +3200,7 @@ async fn handle_notification(
                     }
                 }
                 .instrument(span),
+                startup_tasks,
             );
         }
         SessionEventType::McpOauthRequired => {
@@ -2824,34 +3239,44 @@ async fn handle_notification(
                 session_id = %sid,
                 request_id = %request_id
             );
-            tokio::spawn(
+            let nested_startup_tasks = startup_tasks.cloned();
+            let _ = spawn_startup_tracked(
                 async move {
                     let cancel = McpAuthResult::Cancelled;
-                    let handler_task = tokio::spawn({
-                        let sid = sid.clone();
-                        let request_id = request_id.clone();
-                        let span = tracing::error_span!(
-                            "mcp_auth_callback",
-                            session_id = %sid,
-                            request_id = %request_id
-                        );
-                        async move {
-                            let handler_start = Instant::now();
-                            let response = mcp_auth_handler
-                                .handle(sid.clone(), request_id.clone(), request)
-                                .await;
-                            tracing::debug!(
-                                elapsed_ms = handler_start.elapsed().as_millis(),
+                    let handler_task = spawn_startup_tracked(
+                        {
+                            let sid = sid.clone();
+                            let request_id = request_id.clone();
+                            let span = tracing::error_span!(
+                                "mcp_auth_callback",
                                 session_id = %sid,
-                                request_id = %request_id,
-                                "McpAuthHandler::handle dispatch"
+                                request_id = %request_id
                             );
-                            response
-                        }
-                        .instrument(span)
-                    });
+                            async move {
+                                let handler_start = Instant::now();
+                                let response = mcp_auth_handler
+                                    .handle(sid.clone(), request_id.clone(), request)
+                                    .await;
+                                tracing::debug!(
+                                    elapsed_ms = handler_start.elapsed().as_millis(),
+                                    session_id = %sid,
+                                    request_id = %request_id,
+                                    "McpAuthHandler::handle dispatch"
+                                );
+                                response
+                            }
+                            .instrument(span)
+                        },
+                        nested_startup_tasks.as_ref(),
+                    );
+                    let Some(handler_task) = handler_task else {
+                        // Abandoned startup must not emit even a fallback cancellation RPC.
+                        return;
+                    };
                     let result = match handler_task.await {
                         Ok(result) => result,
+                        // Startup abort is not a handler failure: no fallback RPC.
+                        Err(error) if error.is_cancelled() => return,
                         Err(_) => cancel,
                     };
                     let rpc_start = Instant::now();
@@ -2871,6 +3296,7 @@ async fn handle_notification(
                     );
                 }
                 .instrument(span),
+                startup_tasks,
             );
         }
         SessionEventType::CommandExecute => {
@@ -2886,7 +3312,7 @@ async fn handle_notification(
             let command_handlers = command_handlers.clone();
             let sid = session_id.clone();
             let span = tracing::error_span!("command_handler", session_id = %sid);
-            tokio::spawn(
+            let _ = spawn_startup_tracked(
                 async move {
                     let request_id = data.request_id;
                     let ack_error = match command_handlers.get(&data.command_name).cloned() {
@@ -2933,6 +3359,7 @@ async fn handle_notification(
                     );
                 }
                 .instrument(span),
+                startup_tasks,
             );
         }
         _ => {}
@@ -3567,3 +3994,6 @@ mod tests {
         assert_eq!(data.managed_approval_required, Some(false));
     }
 }
+
+#[cfg(test)]
+mod startup_tasks_tests;

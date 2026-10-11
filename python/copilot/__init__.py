@@ -92,6 +92,10 @@ from .copilot_request_handler import (
 from .generated.rpc import (
     CurrentModel,
     CurrentToolMetadata,
+    ExtensionLaunchProfile,
+    ExtensionLaunchProviderHandler,
+    ExtensionLaunchProviderResolveRequest,
+    ExtensionLaunchProviderResolveResult,
     GitHubTelemetryClientInfo,
     GitHubTelemetryEvent,
     GitHubTelemetryNotification,
@@ -114,6 +118,18 @@ from .generated.session_events import (
     SessionAutoTierSwitchFailedData,
     SessionEvent,
     SessionEventType,
+)
+from .host import (
+    AhpHost,
+    AhpHostExit,
+    AhpHostOptions,
+    AhpSessionCreateRequest,
+    AhpSessionResumeRequest,
+)
+from .installation_confirmation import (
+    InstallationConfirmationContext,
+    InstallationConfirmationDecision,
+    InstallationConfirmationHandler,
 )
 from .session import (
     AgentMessageSource,
@@ -232,6 +248,11 @@ except PackageNotFoundError:
     __version__ = "0.0.0.dev0"
 
 __all__ = [
+    "AhpHost",
+    "AhpHostExit",
+    "AhpHostOptions",
+    "AhpSessionCreateRequest",
+    "AhpSessionResumeRequest",
     "AgentMessageSource",
     "AgentStopHandler",
     "AgentStopHookInput",
@@ -285,6 +306,10 @@ __all__ = [
     "ExitPlanModeHandler",
     "ExitPlanModeRequest",
     "ExitPlanModeResult",
+    "ExtensionLaunchProfile",
+    "ExtensionLaunchProviderHandler",
+    "ExtensionLaunchProviderResolveRequest",
+    "ExtensionLaunchProviderResolveResult",
     "ExtensionInfo",
     "CopilotWebSocketForwarder",
     "DisableBypassPermissionsModes",
@@ -304,6 +329,9 @@ __all__ = [
     "GitHubTokenResult",
     "GitHubTokenCancelledResult",
     "InfiniteSessionConfig",
+    "InstallationConfirmationContext",
+    "InstallationConfirmationDecision",
+    "InstallationConfirmationHandler",
     "InProcessRuntimeConnection",
     "InputOptions",
     "LargeToolOutputConfig",

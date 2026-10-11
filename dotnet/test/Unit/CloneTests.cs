@@ -3,14 +3,19 @@
  *--------------------------------------------------------------------------------------------*/
 
 using Xunit;
+using InstallationDecision = GitHub.Copilot.Rpc.InstallationDecision;
 
 namespace GitHub.Copilot.Test.Unit;
 
 public class CloneTests
 {
+#pragma warning disable GHCP001
     [Fact]
     public void CopilotClientOptions_Clone_CopiesAllProperties()
     {
+        var extensionLaunchProvider = new TestExtensionLaunchProvider();
+        InstallationConfirmationHandler installationConfirmationHandler =
+            (_request, _context) => ValueTask.FromResult(InstallationDecision.Decline);
         var original = new CopilotClientOptions
         {
             Connection = RuntimeConnection.ForTcp(port: 8080, connectionToken: "tok", path: "/usr/bin/copilot", args: ["--verbose", "--debug"]),
@@ -23,6 +28,8 @@ public class CloneTests
             BuiltinPluginDirectories = ["/plugins/core", "/plugins/github"],
             EnableRemoteSessions = true,
             SessionIdleTimeoutSeconds = 600,
+            ExtensionLaunchProvider = extensionLaunchProvider,
+            InstallationConfirmationHandler = installationConfirmationHandler,
             ClientInfo = new CopilotClientInfo
             {
                 ApplicationName = "example-app",
@@ -45,8 +52,11 @@ public class CloneTests
         Assert.NotSame(original.BuiltinPluginDirectories, clone.BuiltinPluginDirectories);
         Assert.Equal(original.EnableRemoteSessions, clone.EnableRemoteSessions);
         Assert.Equal(original.SessionIdleTimeoutSeconds, clone.SessionIdleTimeoutSeconds);
+        Assert.Same(extensionLaunchProvider, clone.ExtensionLaunchProvider);
+        Assert.Same(installationConfirmationHandler, clone.InstallationConfirmationHandler);
         Assert.Same(original.ClientInfo, clone.ClientInfo);
     }
+#pragma warning restore GHCP001
 
     [Fact]
     public void CopilotClientOptions_Clone_ConnectionIsShared()
@@ -68,6 +78,14 @@ public class CloneTests
         var clone = original.Clone();
 
         Assert.Same(original.Environment, clone.Environment);
+    }
+
+    private sealed class TestExtensionLaunchProvider : GitHub.Copilot.Rpc.IExtensionLaunchProviderHandler
+    {
+        public Task<GitHub.Copilot.Rpc.ExtensionLaunchProviderResolveResult> ResolveAsync(
+            GitHub.Copilot.Rpc.ExtensionLaunchProviderResolveRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new GitHub.Copilot.Rpc.ExtensionLaunchProviderResolveResult());
     }
 
     [Fact]
@@ -163,6 +181,28 @@ public class CloneTests
         Assert.Same(original.SessionLimits, clone.SessionLimits);
         Assert.Same(original.OnExitPlanModeRequest, clone.OnExitPlanModeRequest);
         Assert.Same(original.OnAutoModeSwitchRequest, clone.OnAutoModeSwitchRequest);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    [InlineData(null)]
+    public void SessionConfig_Clone_PreservesRefreshCustomInstructions(bool? refresh)
+    {
+        var original = new SessionConfig { RefreshCustomInstructions = refresh };
+
+        var clone = original.Clone();
+
+        Assert.NotSame(original, clone);
+        Assert.Equal(refresh, clone.RefreshCustomInstructions);
+    }
+
+    [Fact]
+    public void SessionConfig_RefreshCustomInstructions_IsCreateOnlyAndDefaultsToNull()
+    {
+        Assert.Null(new SessionConfig().RefreshCustomInstructions);
+        Assert.Null(typeof(SessionConfigBase).GetProperty(nameof(SessionConfig.RefreshCustomInstructions)));
+        Assert.Null(typeof(ResumeSessionConfig).GetProperty(nameof(SessionConfig.RefreshCustomInstructions)));
     }
 
     [Fact]

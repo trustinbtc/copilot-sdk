@@ -33,10 +33,14 @@ pub enum SessionEventType {
     SessionAutopilotObjectiveChanged,
     #[serde(rename = "session.info")]
     SessionInfo,
+    #[serde(rename = "session.indexed_search")]
+    SessionIndexedSearch,
     #[serde(rename = "session.warning")]
     SessionWarning,
     #[serde(rename = "session.model_change")]
     SessionModelChange,
+    #[serde(rename = "session.model_deselected")]
+    SessionModelDeselected,
     ///
     /// <div class="warning">
     ///
@@ -136,6 +140,8 @@ pub enum SessionEventType {
     /// </div>
     #[serde(rename = "session.fusion_completed")]
     SessionFusionCompleted,
+    #[serde(rename = "session.permission_recovery")]
+    SessionPermissionRecovery,
     #[serde(rename = "user.message")]
     UserMessage,
     #[serde(rename = "pending_messages.modified")]
@@ -210,6 +216,8 @@ pub enum SessionEventType {
     PromptCacheBreak,
     #[serde(rename = "model.call_failure")]
     ModelCallFailure,
+    #[serde(rename = "model.call_final_result")]
+    ModelCallFinalResult,
     #[serde(rename = "model.call_finished")]
     ModelCallFinished,
     #[serde(rename = "model.call_start")]
@@ -443,8 +451,8 @@ pub enum SessionEventType {
     /// and may change or be removed in future SDK or CLI releases.
     ///
     /// </div>
-    #[serde(rename = "factory.run_updated")]
-    FactoryRunUpdated,
+    #[serde(rename = "workflow.run_updated")]
+    WorkflowRunUpdated,
     ///
     /// <div class="warning">
     ///
@@ -452,8 +460,8 @@ pub enum SessionEventType {
     /// and may change or be removed in future SDK or CLI releases.
     ///
     /// </div>
-    #[serde(rename = "factory.run_started")]
-    FactoryRunStarted,
+    #[serde(rename = "workflow.run_started")]
+    WorkflowRunStarted,
     ///
     /// <div class="warning">
     ///
@@ -461,8 +469,8 @@ pub enum SessionEventType {
     /// and may change or be removed in future SDK or CLI releases.
     ///
     /// </div>
-    #[serde(rename = "factory.run_settled")]
-    FactoryRunSettled,
+    #[serde(rename = "workflow.run_settled")]
+    WorkflowRunSettled,
     #[serde(rename = "session.skills_loaded")]
     SessionSkillsLoaded,
     #[serde(rename = "session.custom_agents_updated")]
@@ -575,10 +583,14 @@ pub enum SessionEventData {
     SessionAutopilotObjectiveChanged(SessionAutopilotObjectiveChangedData),
     #[serde(rename = "session.info")]
     SessionInfo(SessionInfoData),
+    #[serde(rename = "session.indexed_search")]
+    SessionIndexedSearch(SessionIndexedSearchData),
     #[serde(rename = "session.warning")]
     SessionWarning(SessionWarningData),
     #[serde(rename = "session.model_change")]
     SessionModelChange(SessionModelChangeData),
+    #[serde(rename = "session.model_deselected")]
+    SessionModelDeselected(SessionModelDeselectedData),
     ///
     /// <div class="warning">
     ///
@@ -678,6 +690,8 @@ pub enum SessionEventData {
     /// </div>
     #[serde(rename = "session.fusion_completed")]
     SessionFusionCompleted(SessionFusionCompletedData),
+    #[serde(rename = "session.permission_recovery")]
+    SessionPermissionRecovery(SessionPermissionRecoveryData),
     #[serde(rename = "user.message")]
     UserMessage(UserMessageData),
     #[serde(rename = "pending_messages.modified")]
@@ -752,6 +766,8 @@ pub enum SessionEventData {
     PromptCacheBreak(PromptCacheBreakData),
     #[serde(rename = "model.call_failure")]
     ModelCallFailure(ModelCallFailureData),
+    #[serde(rename = "model.call_final_result")]
+    ModelCallFinalResult(ModelCallFinalResultData),
     #[serde(rename = "model.call_finished")]
     ModelCallFinished(ModelCallFinishedData),
     #[serde(rename = "model.call_start")]
@@ -957,8 +973,8 @@ pub enum SessionEventData {
     /// and may change or be removed in future SDK or CLI releases.
     ///
     /// </div>
-    #[serde(rename = "factory.run_updated")]
-    FactoryRunUpdated(FactoryRunUpdatedData),
+    #[serde(rename = "workflow.run_updated")]
+    WorkflowRunUpdated(WorkflowRunUpdatedData),
     ///
     /// <div class="warning">
     ///
@@ -966,8 +982,8 @@ pub enum SessionEventData {
     /// and may change or be removed in future SDK or CLI releases.
     ///
     /// </div>
-    #[serde(rename = "factory.run_started")]
-    FactoryRunStarted(FactoryRunStartedData),
+    #[serde(rename = "workflow.run_started")]
+    WorkflowRunStarted(WorkflowRunStartedData),
     ///
     /// <div class="warning">
     ///
@@ -975,8 +991,8 @@ pub enum SessionEventData {
     /// and may change or be removed in future SDK or CLI releases.
     ///
     /// </div>
-    #[serde(rename = "factory.run_settled")]
-    FactoryRunSettled(FactoryRunSettledData),
+    #[serde(rename = "workflow.run_settled")]
+    WorkflowRunSettled(WorkflowRunSettledData),
     #[serde(rename = "session.skills_loaded")]
     SessionSkillsLoaded(SessionSkillsLoadedData),
     #[serde(rename = "session.custom_agents_updated")]
@@ -1388,6 +1404,87 @@ pub struct SessionInfoData {
     pub url: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexedSearchDataStatus {
+    /// Indexed-search event variant discriminator.
+    pub kind: IndexedSearchDataStatusKind,
+    /// Current indexed-search state for this session activation.
+    pub state: IndexedSearchState,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexedSearchDataStartup {
+    /// Why indexed search was disabled, when applicable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub disabled_reason: Option<IndexedSearchDisabledReason>,
+    /// Whether the repository meets the automatic indexing file-count threshold, when known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub eligible: Option<bool>,
+    /// Startup failure details. May contain sensitive user data; restricted telemetry only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    /// Number of text files counted in the repository.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_count: Option<f64>,
+    /// Whether indexed search was explicitly enabled through the environment.
+    pub forced_by_env: bool,
+    /// Indexed-search event variant discriminator.
+    pub kind: IndexedSearchDataStartupKind,
+    /// Outcome of this startup attempt.
+    pub outcome: IndexedSearchOutcome,
+    /// Wall-clock duration of startup in milliseconds.
+    pub startup_duration_ms: f64,
+    /// Whether waiting for index readiness was requested, including skipped attempts.
+    pub warm_start: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexedSearchDataServerError {
+    /// Server failure details. May contain sensitive user data; restricted telemetry only.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_message: Option<String>,
+    /// Category of the server failure.
+    pub error_type: IndexedSearchErrorType,
+    /// Process exit code, when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<f64>,
+    /// Indexed-search event variant discriminator.
+    pub kind: IndexedSearchDataServerErrorKind,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexedSearchDataIncremental {
+    /// Number of added files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub added_file_count: Option<f64>,
+    /// Number of modified files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub changed_file_count: Option<f64>,
+    /// Number of deleted files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_file_count: Option<f64>,
+    /// Indexed-search event variant discriminator.
+    pub kind: IndexedSearchDataIncrementalKind,
+    /// Phase of the incremental index update.
+    pub phase: IndexedSearchIncrementalPhase,
+    /// Total number of detected changes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_change_count: Option<f64>,
+    /// Total incremental indexing duration in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_duration_ms: Option<f64>,
+    /// Index update duration in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub update_duration_ms: Option<f64>,
+    /// Workspace scan duration in milliseconds.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub walk_duration_ms: Option<f64>,
+}
+
 /// Session event "session.warning". Warning message for timeline display with categorization
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -1446,6 +1543,16 @@ pub struct SessionModelChangeData {
     /// Output verbosity level after the model change, if applicable
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verbosity: Option<Verbosity>,
+}
+
+/// Session event "session.model_deselected". The model the user had explicitly selected is no longer available, because the host that published it withdrew it, so the session no longer has an explicit selection. The next turn resolves a default as though the user had never chosen a model. Clients should stop presenting the previous model as selected. This event is durable because resume rebuilds the selected model from the event log; without it a resumed session would restore a model its provider no longer serves. Reasoning effort, verbosity, and other session-level preferences are deliberately unchanged, because they belong to the session rather than to the model.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionModelDeselectedData {
+    /// Model that was selected before the host withdrew it.
+    pub previous_model: String,
+    /// Low-cardinality reason the selection was cleared.
+    pub reason: ModelDeselectedReason,
 }
 
 /// Session event "session.auto_tier_recommendation". Live-only Auto preference recommendation from Copilot API after a successful Auto model call.
@@ -1635,9 +1742,12 @@ pub struct SessionTruncationData {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSnapshotRewindData {
+    /// The removed events, starting with `upToEventId`. Later events not listed were kept, such as a background agent's events that interleaved with a withdrawn turn
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_ids: Option<Vec<String>>,
     /// Number of events that were removed by the rewind
     pub events_removed: i64,
-    /// Event ID that was rewound to; this event and all after it were removed
+    /// First removed event. Without `eventIds`, it and every event after it were removed
     pub up_to_event_id: String,
 }
 
@@ -1999,14 +2109,30 @@ pub struct CompactionCompleteCompactionTokensUsed {
     pub output_tokens: Option<i64>,
 }
 
+/// Original request-level and effective conversation reasoning effort for a provider history boundary; the historical type name is retained for compatibility
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResponsesReasoning {
+    /// Effective effort selected before this message, independent of the response-level reasoning field
+    pub effort: String,
+    /// Original request-level effort, retained while replaying this conversation prefix
+    pub initial_effort: String,
+    /// Provider model whose reasoning settings this boundary records
+    pub model: String,
+}
+
 /// Session event "session.compaction_complete". Conversation compaction results including success status, metrics, and optional error details
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionCompactionCompleteData {
-    /// Authoritative active-factory reminder appended to the compacted context
+    /// Legacy active-workflow reminder retained for replay compatibility
     #[doc(hidden)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) active_factory_summary: Option<String>,
+    /// Authoritative active-workflow reminder appended to the compacted context
+    #[doc(hidden)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) active_workflow_summary: Option<String>,
     /// Canonical model identifier used for model-specific behavior when replaying compaction
     #[serde(skip_serializing_if = "Option::is_none")]
     pub behavior_model_id: Option<String>,
@@ -2043,6 +2169,9 @@ pub struct SessionCompactionCompleteData {
     /// GitHub request tracing ID (x-github-request-id header) for the compaction LLM call
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<RequestId>,
+    /// Reasoning baseline on the replacement summary, preserved when replay skips the compacted history
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responses_reasoning: Option<ResponsesReasoning>,
     /// Copilot service request ID (x-copilot-service-request-id header) for the compaction LLM call
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_request_id: Option<String>,
@@ -2071,10 +2200,74 @@ pub struct SessionCompactionCompleteData {
     pub trigger: Option<CompactionTrigger>,
 }
 
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionRecoveryAttempt {
+    /// Unique identifier for this attempt record
+    pub attempt_id: String,
+    /// How the runtime handled this attempt
+    pub disposition: PermissionRecoveryAttemptDisposition,
+    /// One-based position of this attempt in the episode
+    pub ordinal: i64,
+    /// Controlled permission request kind, such as shell, path, URL, or tool
+    pub permission_kind: String,
+    /// Controlled reason for the attempt disposition
+    pub reason: PermissionRecoveryAttemptReason,
+    /// Relationship between this attempt and earlier attempts in the episode
+    pub relation: PermissionRecoveryAttemptRelation,
+    /// SHA-256 fingerprint of normalized request data; raw permission arguments are not included
+    pub request_fingerprint: String,
+    /// Tool-call identifier associated with this attempt, when available
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// Authoritative snapshot of an Autopilot permission-recovery episode
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionRecoveryData {
+    /// Ordered privacy-safe record of permission attempts and the successful alternative, when any
+    pub attempts: Vec<PermissionRecoveryAttempt>,
+    /// Stable identifier shared by every transition in this recovery episode
+    pub episode_id: String,
+    /// Maximum number of distinct autonomous permission attempts allowed before escalation
+    pub max_attempts: i64,
+    /// Policy selected from the current client's response capability; mode or client changes may update it during recovery
+    pub on_blocked: PermissionRecoveryOnBlocked,
+    /// Controlled reason for the latest episode transition
+    pub reason: PermissionRecoveryReason,
+    /// Current lifecycle state of the recovery episode
+    pub status: PermissionRecoveryStatus,
+}
+
+/// Structured reason that the task cannot continue without intervention
+///
+/// <div class="warning">
+///
+/// **Experimental.** This type is part of an experimental wire-protocol surface
+/// and may change or be removed in future SDK or CLI releases.
+///
+/// </div>
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskBlocker {
+    /// Category of intervention that blocked the task
+    pub kind: TaskBlockerKind,
+    /// Permission-recovery episode that produced this blocker
+    pub permission_recovery: PermissionRecoveryData,
+    /// Controlled reason for the current blocked state
+    pub reason: PermissionRecoveryReason,
+    /// Whether a later user response or steering message can resume the task
+    pub resumable: bool,
+}
+
 /// Session event "session.task_complete". Task completion notification with summary from the agent
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionTaskCompleteData {
+    /// Structured blocker details when outcome is blocked
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<TaskBlocker>,
     /// Active autopilot objective ID evaluated by the completion reviewer
     #[serde(skip_serializing_if = "Option::is_none")]
     pub objective_id: Option<i64>,
@@ -2200,6 +2393,46 @@ pub struct SessionFusionRouteFailedData {
     pub synthetic_model: String,
 }
 
+///
+/// <div class="warning">
+///
+/// **Experimental.** This type is part of an experimental wire-protocol surface
+/// and may change or be removed in future SDK or CLI releases.
+///
+/// </div>
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FusionCritic {
+    /// Concrete model selected for this critic.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    pub model: String,
+    /// Unique execution phase identifier for this critic.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    pub phase_id: String,
+    /// Explicit reasoning effort selected for this critic, if supplied.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+}
+
 /// Durable server recommendation for subsequent HydraFusion turns.
 ///
 /// <div class="warning">
@@ -2272,6 +2505,16 @@ pub struct FusionScores {
 pub struct SessionFusionResolvedData {
     /// Version of the validated HydraFusion event contract.
     pub contract_version: i64,
+    /// Planned Critique phase identities, including independent critics with repeated model IDs. May be absent in older events; consumers then use secondaryModel for the legacy critic.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub critics: Option<Vec<FusionCritic>>,
     /// Concrete model used when the planned primary model cannot execute.
     pub fallback_model: String,
     /// Router recommendation controlling reuse or rerouting on later turns.
@@ -2281,6 +2524,26 @@ pub struct SessionFusionResolvedData {
     pub follow_up_model: String,
     /// Stable identifier for the resolved HydraFusion turn.
     pub fusion_id: String,
+    /// Short human-readable summary of the selected workflow, suitable for immediate client display after routing. May be absent in older durable events; omit the explanation or derive one from pattern and phasePlan. Display text, not a stable machine-readable value.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    /// Concrete model selected for Cascade escalation-gate calls, when required.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub judge_model: Option<String>,
     /// Version of the executable model universe used for selection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model_universe_version: Option<String>,
@@ -2306,6 +2569,16 @@ pub struct SessionFusionResolvedData {
     pub policy_version: Option<String>,
     /// Concrete model selected for the primary solver phase.
     pub primary_model: String,
+    /// Concrete model selected for Cascade repair, when required.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repair_model: Option<String>,
     /// Router implementation that supplied the plan.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub route_source: Option<String>,
@@ -2324,7 +2597,7 @@ pub struct SessionFusionResolvedData {
     /// Validated capability scores used to select the route.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub scores: Option<FusionScores>,
-    /// Concrete model selected for the review or judge phase, when required.
+    /// Concrete model selected for Critique review, or the legacy Cascade judge/repair model when role-specific fields are absent.
     pub secondary_model: Option<String>,
     /// Synthetic HydraFusion model selected for the session.
     pub synthetic_model: String,
@@ -2382,6 +2655,24 @@ pub struct SessionFusionCompletedData {
     pub turn_id: String,
 }
 
+/// Session event "session.permission_recovery". Authoritative snapshot of an Autopilot permission-recovery episode
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionPermissionRecoveryData {
+    /// Ordered privacy-safe record of permission attempts and the successful alternative, when any
+    pub attempts: Vec<PermissionRecoveryAttempt>,
+    /// Stable identifier shared by every transition in this recovery episode
+    pub episode_id: String,
+    /// Maximum number of distinct autonomous permission attempts allowed before escalation
+    pub max_attempts: i64,
+    /// Policy selected from the current client's response capability; mode or client changes may update it during recovery
+    pub on_blocked: PermissionRecoveryOnBlocked,
+    /// Controlled reason for the latest episode transition
+    pub reason: PermissionRecoveryReason,
+    /// Current lifecycle state of the recovery episode
+    pub status: PermissionRecoveryStatus,
+}
+
 /// Session event "user.message". Payload of `user.message` with displayed and model-transformed content, attachments, source/delivery metadata, mode, and telemetry IDs.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2412,6 +2703,9 @@ pub struct UserMessageData {
     /// Parent agent task ID for background telemetry correlated to this user turn
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_agent_task_id: Option<String>,
+    /// Provider reasoning settings anchored before this model-facing message for cache-stable replay; the historical responsesReasoning name is retained for compatibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responses_reasoning: Option<ResponsesReasoning>,
     /// Origin of this message, used for timeline filtering and attribution (e.g., `skill-pdf` for hidden skill injection or `agent-<agent-id>` for an inter-agent prompt)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
@@ -2441,6 +2735,9 @@ pub struct AssistantTurnStartData {
     /// Model identifier used for this turn, when known
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Parent task tool call ID when this turn belongs to a sub-agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_tool_call_id: Option<String>,
     /// Identifier for this turn within the agentic loop, typically a stringified turn number
     pub turn_id: String,
 }
@@ -2532,6 +2829,16 @@ pub struct AssistantFusionPhaseStartedData {
     pub phase_id: String,
     /// Kind of phase being executed.
     pub phase_kind: FusionPhaseKind,
+    /// Explicit reasoning effort selected for this phase, if supplied.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     /// Semantic role assigned to the phase.
     pub role: String,
 }
@@ -2646,6 +2953,16 @@ pub struct AssistantFusionPhaseCompletedData {
     #[doc(hidden)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) projection_mode: Option<FusionProjectionMode>,
+    /// Explicit reasoning effort selected for this phase, if supplied.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     /// Semantic role assigned to the completed phase.
     pub role: String,
     /// Terminal request held outside canonical state until selected by the final commit.
@@ -2691,6 +3008,16 @@ pub struct AssistantFusionPhaseFailedData {
     pub phase_kind: FusionPhaseKind,
     /// Stable machine-readable reason for the phase failure.
     pub reason: String,
+    /// Explicit reasoning effort selected for this phase, if supplied.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
     /// Semantic role assigned to the failed phase.
     pub role: String,
     /// Durable outcome status of the phase.
@@ -2863,6 +3190,9 @@ pub struct FusionAttribution {
     pub conversation_scope: Option<String>,
     /// Stable identifier for the HydraFusion turn that produced the event.
     pub fusion_id: String,
+    /// Whether this model request consumed a user steering message rather than only internal Fusion work.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_user_steering: Option<bool>,
     /// HydraFusion orchestration pattern selected for the turn.
     pub pattern: String,
     /// Identifier of the concrete phase that produced the event.
@@ -3100,6 +3430,9 @@ pub struct AssistantTurnEndData {
     /// Model identifier used for this turn, when known
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Parent task tool call ID when this turn belongs to a sub-agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_tool_call_id: Option<String>,
     /// Identifier of the turn that has ended, matching the corresponding assistant.turn_start event
     pub turn_id: String,
 }
@@ -3324,6 +3657,14 @@ pub struct AssistantUsageData {
     /// Copilot service request ID (x-copilot-service-request-id header) for CAPI log correlation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_request_id: Option<String>,
+    /// Number of prior thinking blocks the provider dropped while transforming the request
+    #[doc(hidden)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) thinking_dropped_blocks: Option<i64>,
+    /// Recognized provider-reported reasons for dropped thinking blocks, in response order
+    #[doc(hidden)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) thinking_dropped_reasons: Option<Vec<String>>,
     /// Time to first token in milliseconds. Only available for streaming requests
     #[serde(skip_serializing_if = "Option::is_none")]
     pub time_to_first_token_ms: Option<f64>,
@@ -3506,6 +3847,9 @@ pub struct ModelCallFailureData {
     /// Model identifier used for the failed API call
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Parent task tool call ID when this failed model call belongs to a sub-agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_tool_call_id: Option<String>,
     /// GitHub request tracing ID (x-github-request-id header) for server-side log correlation
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_call_id: Option<String>,
@@ -3533,6 +3877,19 @@ pub struct ModelCallFailureData {
     /// Transport used for the failed model call (http or websocket)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transport: Option<ModelCallFailureTransport>,
+}
+
+/// Session event "model.call_final_result". Internal telemetry result for one logical model operation after all orchestrator-owned retries settle
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelCallFinalResultData {
+    /// Whether the final attempt used a bring-your-own-key provider
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_byok: Option<bool>,
+    /// Model identifier used by the final attempt
+    pub model: String,
+    /// Bounded result of the final attempt
+    pub result: ModelCallFinalResult,
 }
 
 /// Session event "model.call_finished". Final lifecycle outcome for one logical model dispatch. A logical dispatch may include internal reconnect or fallback work, so event count is not provider HTTP-request count.
@@ -3572,6 +3929,9 @@ pub struct ModelCallStartData {
     /// Model identifier used for this API call, when known
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
+    /// Parent task tool call ID when this model call belongs to a sub-agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_tool_call_id: Option<String>,
     /// Previous response or interaction identifier included in the model request, when present
     #[doc(hidden)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -3712,6 +4072,9 @@ pub struct ToolExecutionStartData {
     pub tool_description: Option<ToolExecutionStartToolDescription>,
     /// Name of the tool being executed
     pub tool_name: String,
+    /// Human-readable display title for the tool, when the selected tool descriptor has a non-empty title.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_title: Option<String>,
     /// Identifier for the agent loop turn this tool was invoked in, matching the corresponding assistant.turn_start event
     #[serde(skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
@@ -4307,6 +4670,9 @@ pub struct SkillInvokedData {
     /// Whether model invocation is disabled for this skill
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disable_model_invocation: Option<bool>,
+    /// Projected chat-message count when the skill was invoked. New writers persist this so replay does not need to reconstruct superseded history; readers derive it for legacy events when absent.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoked_at_turn: Option<i64>,
     /// Model identifier active when the skill was invoked, when known
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -4345,6 +4711,9 @@ pub struct SkillInvokedRefData {
     /// Whether model invocation is disabled for this skill
     #[serde(skip_serializing_if = "Option::is_none")]
     pub disable_model_invocation: Option<bool>,
+    /// Projected chat-message count when the skill was invoked. Preserved from the inline event data when the authored body is deduplicated.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoked_at_turn: Option<i64>,
     /// Model identifier active when the skill was invoked, when known
     #[serde(skip_serializing_if = "Option::is_none")]
     pub model: Option<String>,
@@ -4398,10 +4767,288 @@ pub struct SkillContextDeliveredRefData {
     pub suffix: Option<String>,
 }
 
-/// Session event "sandbox.decision". Payload of `sandbox.decision`, a bounded governance record of what the process sandbox was configured to do and whether it took effect. Discriminated by `kind`.
+/// Effective sandbox filesystem rules, in policy order. Only populated when content capture is enabled, since these are real host paths.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SandboxDecisionData {}
+pub struct SandboxFilesystemPolicyDetails {
+    /// Paths the sandboxed process may not access at all
+    pub denied_paths: Vec<String>,
+    /// Paths the sandboxed process may read but not write
+    pub readonly_paths: Vec<String>,
+    /// Paths the sandboxed process may read and write
+    pub readwrite_paths: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataPolicyResolved {
+    /// Whether the current working directory was granted automatically
+    pub add_current_working_directory: bool,
+    /// Whether callers may opt an individual command out of the sandbox
+    pub allow_bypass: bool,
+    /// Whether the sandboxed process may reach loopback and private-range addresses
+    pub allow_local_network: bool,
+    /// Whether the sandboxed process may open outbound network connections
+    pub allow_outbound: bool,
+    /// Process-containment implementation backing the sandbox
+    pub backend: SandboxBackend,
+    /// Enforcement mechanism this decision describes
+    pub control: SandboxControl,
+    /// Why enforcement is weaker than configured, when it is
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degradation_reason: Option<SandboxDegradationReason>,
+    /// Number of denied path rules in the effective policy
+    pub denied_paths_count: i64,
+    /// Effective filesystem rules. Populated only when content capture is enabled; the counts above are always present.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub effective_filesystem_policy: Option<SandboxFilesystemPolicyDetails>,
+    /// Runtime subsystem that applied the policy
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Whether the sandbox policy permits GitHub CLI credentials inside the sandbox. A policy capability, not proof that a credential was injected into this spawn: injection is per-command
+    pub gh_auth: bool,
+    /// Whether the sandbox policy permits git credentials inside the sandbox. A policy capability, not proof that a credential was injected into this spawn: injection is per-command
+    pub git_auth: bool,
+    /// Whether the macOS keychain was reachable from inside the sandbox. Always false on other platforms.
+    pub keychain_access: bool,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataPolicyResolvedKind,
+    /// Whether the resolved policy is fully active or degraded
+    pub outcome: SandboxOutcome,
+    /// Host platform the sandbox is running on
+    pub platform: SandboxPlatform,
+    /// Whether the policy came from built-in defaults or user configuration
+    pub policy_source: SandboxPolicySource,
+    /// Whether outbound traffic is unproxied, routed through a loopback proxy, or routed through an external proxy
+    pub proxy_mode: SandboxProxyMode,
+    /// Number of read-only path rules in the effective policy
+    pub readonly_paths_count: i64,
+    /// Number of read-write path rules in the effective policy
+    pub readwrite_paths_count: i64,
+    /// Internal tool-call ID, used only to correlate the decision with its owning span. Omitted when the decision is not attributable to a tool call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataSpawnCompleted {
+    /// Process-containment implementation backing the sandbox
+    pub backend: SandboxBackend,
+    /// Enforcement mechanism this decision describes
+    pub control: SandboxControl,
+    /// Why enforcement is weaker than configured, when it is
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub degradation_reason: Option<SandboxDegradationReason>,
+    /// Wall-clock time spent spawning the sandboxed process, in milliseconds
+    pub duration_ms: f64,
+    /// Runtime subsystem that applied the policy
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataSpawnCompletedKind,
+    /// Whether the sandboxed process launched under the named backend. Not the exit status of the command that ran inside it.
+    pub outcome: SandboxOutcome,
+    /// Host platform the sandbox is running on
+    pub platform: SandboxPlatform,
+    /// Internal tool-call ID, used only to correlate the decision with its owning span. Omitted when the decision is not attributable to a tool call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataEnforcementState {
+    /// Runtime observation backing the state. Omitted for `inactive`, which has nothing to attest.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attestation: Option<SandboxAttestation>,
+    /// Containment backend that engaged. `unsupported` for any state other than `engaged`, since no backend is known to have run.
+    pub backend: SandboxBackend,
+    /// Command the enforcement governed. Populated only when content capture is enabled, and only for shell commands; MCP, LSP, and search command lines are runtime plumbing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Enforcement mechanism this decision describes
+    pub control: SandboxControl,
+    /// Runtime subsystem whose enforcement this describes
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataEnforcementStateKind,
+    /// Observed enforcement state: `engaged`, `inactive`, or `failed`. Derived from runtime evidence, never from the configured posture or the compile-time target platform.
+    pub outcome: SandboxOutcome,
+    /// Host platform the sandbox is running on
+    pub platform: SandboxPlatform,
+    /// Internal tool-call ID, used only to correlate the decision with its owning span. Omitted when the decision is not attributable to a tool call.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// An enforcement check refused a specific access. Emitted per refusal with no deduplication, including when policy permits the caller to bypass the denial. Carries no backend: the built-in checks that produce this run in-process against the effective policy.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataAccessDenied {
+    /// Runtime observation backing the denial.
+    pub attestation: SandboxAttestation,
+    /// Command whose execution the denial arose from. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// How strong the evidence behind this denial is. Lets an analysis separate denials the sandbox recorded from ones inferred from output text, which otherwise look identical.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<SandboxDenialConfidence>,
+    /// Sandbox control the denial belongs to. Follows from `denialClass`.
+    pub control: SandboxControl,
+    /// Bounded class of the refused access.
+    pub denial_class: SandboxDenialClass,
+    /// Resource the check refused, when identified and content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denied_resource: Option<String>,
+    /// Runtime subsystem that performed the check
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataAccessDeniedKind,
+    /// Always `denied`.
+    pub outcome: SandboxOutcome,
+    /// Host operating-system family
+    pub platform: SandboxPlatform,
+    /// Executable image associated with the captured denial, normalized to a basename. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_name: Option<String>,
+    /// Tool call the denial belongs to, for span correlation only. Never exported as a telemetry attribute or metric dimension.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// Permissive learning mode (record and allow) recorded an access that the enforced policy would have refused, and allowed it. Emitted once per distinct recorded access of a record-and-allow run, bounded per command. The only per-access record of such a run: nothing was refused, so no `access_denied` is raised for it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataAccessRecorded {
+    /// Command that made the access. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// Sandbox control the access belongs to. Follows from `denialClass`.
+    pub control: SandboxControl,
+    /// Bounded class of the access the enforced policy would have refused.
+    pub denial_class: SandboxDenialClass,
+    /// Resource the enforced policy would have refused. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denied_resource: Option<String>,
+    /// Runtime subsystem that ran the command
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataAccessRecordedKind,
+    /// Always `allowed`.
+    pub outcome: SandboxOutcome,
+    /// Why the run recorded and allowed instead of enforcing.
+    pub permissive_source: SandboxPermissiveSource,
+    /// Host operating-system family
+    pub platform: SandboxPlatform,
+    /// Tool call the access belongs to, for span correlation only. Never exported as a telemetry attribute or metric dimension.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// A request to run outside the process sandbox was resolved. This is what makes an `inactive` `enforcement_state` readable: without it, a command that ran unsandboxed because a person approved a bypass looks identical to one that ran unsandboxed because the session never had a sandbox. Reported only when a sandbox was in force, since bypassing a disabled sandbox bypasses nothing. Carries neither backend nor attestation: the verdict comes from the runtime's own permission flow or the local escalation prompt, not from a containment backend and not from the built-in policy check, so `source` is what records where it came from.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataBypassDecided {
+    /// Command the verdict governs. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// How strong the evidence behind `denialClass` was. Present exactly when `denialClass` is, so a verdict that relaxed the sandbox on a guess is distinguishable from one that relaxed it on a recorded refusal. Named to match `access_denied`, which reports the same pair.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<SandboxDenialConfidence>,
+    /// Always `bypass`.
+    pub control: SandboxControl,
+    /// Bounded class of the access whose refusal raised this escalation. Omitted for a pre-execution bypass, such as a detached command that cannot be sandboxed and therefore resolves no denial.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denial_class: Option<SandboxDenialClass>,
+    /// Resource whose refusal raised this escalation. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denied_resource: Option<String>,
+    /// Runtime subsystem the bypass applies to
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataBypassDecidedKind,
+    /// Whether the bypass was granted: `approved` or `declined`. `declined` also covers the cases where nobody answered, since the sandboxed denial stands either way.
+    pub outcome: SandboxOutcome,
+    /// Host operating-system family
+    pub platform: SandboxPlatform,
+    /// Executable image associated with the denial that raised this escalation, normalized to a basename. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_name: Option<String>,
+    /// Where the request originated. Orthogonal to `outcome`.
+    pub source: SandboxBypassSource,
+    /// Tool call the decision belongs to, for span correlation only. Never exported as a telemetry attribute or metric dimension.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// A permissive retry was resolved. Distinct from `bypass_decided` because this rung never requests a run outside the process sandbox: it relaxes the process container for one run while the sandbox, and with it the network policy, stays attached. Reported for both outcomes, so an escalation the user declined still leaves evidence that the runtime asked and that the sandboxed denial stood.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataPermissiveRetryDecided {
+    /// Command the verdict governs. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// How strong the evidence behind `denialClass` was. Present exactly when `denialClass` is.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<SandboxDenialConfidence>,
+    /// Always `process`: the process container is what this rung relaxes, and the network control is deliberately untouched.
+    pub control: SandboxControl,
+    /// Bounded class of the access whose refusal raised this escalation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denial_class: Option<SandboxDenialClass>,
+    /// Resource whose refusal raised this escalation. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denied_resource: Option<String>,
+    /// Runtime subsystem the retry applies to
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataPermissiveRetryDecidedKind,
+    /// Whether the permissive retry was granted: `approved` or `declined`. `declined` also covers the cases where nobody answered, since the sandboxed denial stands either way.
+    pub outcome: SandboxOutcome,
+    /// Host operating-system family
+    pub platform: SandboxPlatform,
+    /// Executable image associated with the denial that raised this escalation, normalized to a basename. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_name: Option<String>,
+    /// Where the request originated. Orthogonal to `outcome`.
+    pub source: SandboxBypassSource,
+    /// Tool call the decision belongs to, for span correlation only. Never exported as a telemetry attribute or metric dimension.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
+
+/// An approved permissive retry finished. `succeeded` means the retry exited successfully without another correlated sandbox denial; `failed` means it failed or remained blocked and may therefore be followed by a full bypass.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SandboxDecisionDataPermissiveRetryCompleted {
+    /// Command the retry executed. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    /// How strong the evidence behind `denialClass` was.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<SandboxDenialConfidence>,
+    /// Always `process`: the retry changes process-container enforcement while leaving network policy attached.
+    pub control: SandboxControl,
+    /// Bounded class of the access whose refusal raised the permissive retry.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denial_class: Option<SandboxDenialClass>,
+    /// Resource whose refusal raised the retry. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denied_resource: Option<String>,
+    /// Runtime subsystem that ran the retry
+    pub enforcement_point: SandboxEnforcementPoint,
+    /// Sandbox decision variant discriminator.
+    pub kind: SandboxDecisionDataPermissiveRetryCompletedKind,
+    /// Whether the permissive retry completed successfully: `succeeded` or `failed`.
+    pub outcome: SandboxOutcome,
+    /// Host operating-system family
+    pub platform: SandboxPlatform,
+    /// Executable image associated with the denial that raised the retry, normalized to a basename. Populated only when content capture is enabled.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_name: Option<String>,
+    /// Tool call the completion belongs to, for span correlation only. Never exported as a telemetry attribute or metric dimension.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
+}
 
 /// Session event "subagent.started". Sub-agent startup details including parent tool call and agent information
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -4419,7 +5066,7 @@ pub struct SubagentStartedData {
     /// Whether the sub-agent runs synchronously or in the background.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub execution_mode: Option<String>,
-    /// Root id of the factory run that spawned this sub-agent, when it was spawned by one.
+    /// Legacy root id of the workflow run that spawned this sub-agent. New consumers should use workflowRunId.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub factory_run_id: Option<String>,
     /// Model the sub-agent will run with, when known at start.
@@ -4434,11 +5081,14 @@ pub struct SubagentStartedData {
     /// Whether this sub-agent can be resumed. Currently always false.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resumable: Option<bool>,
-    /// Where the model input for this sub-agent came from. Present when the task planner resolved the launch (the task tool and factory agents); absent for sub-agents created through other runtime paths.
+    /// Where the model input for this sub-agent came from. Present when the task planner resolved the launch (the task tool and workflow agents); absent for sub-agents created through other runtime paths.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub task_model_source: Option<SubagentTaskModelSource>,
     /// Tool call ID of the parent tool invocation that spawned this sub-agent
     pub tool_call_id: String,
+    /// Root id of the workflow run that spawned this sub-agent, when it was spawned by one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub workflow_run_id: Option<String>,
 }
 
 /// Session event "subagent.configured". Resolved runtime configuration for a configured sub-agent
@@ -4653,11 +5303,25 @@ pub struct SessionBinaryAssetData {
     pub r#type: BinaryAssetType,
 }
 
+/// One persisted structured system-message block and its cache intent
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemMessageContentBlock {
+    /// Explicit prompt-cache intent. True places a breakpoint after this block, false suppresses one, and absence preserves the provider's legacy default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_breakpoint: Option<bool>,
+    /// Text content for this system-message block.
+    pub content: String,
+    /// Diagnostic classification indicating whether the block is stable across equivalent sessions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub is_static: Option<bool>,
+}
+
 /// Metadata about the prompt template and its construction
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemMessageMetadata {
-    /// Version identifier of the prompt template used
+    /// Version identifier of the prompt template or structured prompt layout used
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_version: Option<String>,
     /// Template variables used when constructing the prompt
@@ -4671,6 +5335,9 @@ pub struct SystemMessageMetadata {
 pub struct SystemMessageData {
     /// The system or developer prompt text sent as model input
     pub content: String,
+    /// Optional ordered structured blocks corresponding to content, retained for prompt-cache layout restoration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub content_blocks: Option<Vec<SystemMessageContentBlock>>,
     /// Logical interaction identifier for the model run receiving this prompt
     #[serde(skip_serializing_if = "Option::is_none")]
     pub interaction_id: Option<String>,
@@ -4692,6 +5359,9 @@ pub struct SystemNotificationData {
     pub content: String,
     /// Structured metadata identifying what triggered this notification
     pub kind: serde_json::Value,
+    /// Provider reasoning settings anchored before this model-facing message for cache-stable replay; the historical responsesReasoning name is retained for compatibility
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub responses_reasoning: Option<ResponsesReasoning>,
 }
 
 /// A parsed command identifier in a shell permission request, including whether it is read-only.
@@ -4720,6 +5390,29 @@ pub struct PermissionRequestShellCommandSegment {
 pub struct PermissionRequestShellPossibleUrl {
     /// URL that may be accessed by the command
     pub url: String,
+}
+
+/// A sandbox filesystem policy edit that would let a blocked operation run inside the sandbox instead of outside it. Offered only on a sandbox escalation request whose denial adding this path lifts, and only when managed policy permits the grant. A host accepts it with session.sandbox.grantPathForRequest, which adds the path to the session's sandbox policy and re-runs the operation sandboxed; a host that persists sandbox settings may also save the path there.
+///
+/// <div class="warning">
+///
+/// **Experimental.** This type is part of an experimental wire-protocol surface
+/// and may change or be removed in future SDK or CLI releases.
+///
+/// </div>
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionSandboxPathGrant {
+    /// Which access the grant confers, and so which policy list the path is added to
+    pub access: PermissionSandboxPathGrantAccess,
+    /// The path the sandbox refused, present only when it differs from path. That happens when a write under a read-only folder moves the folder to the read-write paths, when a path that does not exist yet is granted through its nearest existing folder, because the OS sandbox cannot grant a path before it exists, and when either is spelled through a symlink, because a grant covers its path as written, so path is then the resolved location. Hosts should then name path in the offer, since the denial names this one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub denied_path: Option<String>,
+    /// Absolute path to add to the sandbox filesystem policy
+    pub path: String,
+    /// readonlyPaths entries the grant removes, exactly as written in the policy, because a read-only entry for the same location would otherwise keep the path read-only. A host that persists the path must remove these entries from its stored readonlyPaths too.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub removed_readonly_paths: Option<Vec<String>>,
 }
 
 /// Shell command permission request
@@ -4777,6 +5470,16 @@ pub struct PermissionRequestShell {
     /// </div>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_working_directory: Option<String>,
+    /// Sandbox policy edit that would let the command run inside the sandbox. Only present when requestSandboxBypass is true.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_path_grant: Option<PermissionSandboxPathGrant>,
     /// Tool call ID that triggered this permission request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
@@ -4821,6 +5524,16 @@ pub struct PermissionRequestWrite {
     /// </div>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_path: Option<String>,
+    /// Sandbox policy edit that would let the write run inside the sandbox. Only present when requestSandboxBypass is true.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_path_grant: Option<PermissionSandboxPathGrant>,
     /// Tool call ID that triggered this permission request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
@@ -4855,6 +5568,16 @@ pub struct PermissionRequestRead {
     /// </div>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_path: Option<String>,
+    /// Sandbox policy edit that would let the read run inside the sandbox. Only present when requestSandboxBypass is true.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_path_grant: Option<PermissionSandboxPathGrant>,
     /// Tool call ID that triggered this permission request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
@@ -4922,6 +5645,21 @@ pub struct PermissionRequestUrl {
     pub url: String,
 }
 
+/// Bounded runtime attribution, independent of free-text rationale. Telemetry revalidates this vocabulary before standard collection.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionApprovalEvaluation {
+    /// Stage that produced this attribution.
+    pub evaluation_stage: PermissionApprovalEvaluationEvaluationStage,
+    /// Whether the request invoked the judge interface. A cached recommendation retains the original attempt fact. Omitted means unknown, including inherited outcomes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub judge_attempted: Option<bool>,
+    /// Status of the local judge interface, not proof of a model network call.
+    pub judge_status: PermissionApprovalEvaluationJudgeStatus,
+    /// Machine-readable runtime gate reason, never a command, path or human rationale.
+    pub reason_code: PermissionApprovalEvaluationReasonCode,
+}
+
 /// Assisted-approval judge information attached to a permission request. Present only in assisted mode; its absence means the judge did not evaluate the request. The `recommendation` conveys the judge's disposition for this request.
 ///
 /// <div class="warning">
@@ -4933,6 +5671,9 @@ pub struct PermissionRequestUrl {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionAssistedApproval {
+    /// Runtime reason and judge-call metadata. Absent on older events; missing metadata means unknown, not that the judge was skipped.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub evaluation: Option<PermissionApprovalEvaluation>,
     /// Classified cause of an `error` recommendation. Absent for every other recommendation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<AssistedApprovalJudgeFailureReason>,
@@ -5058,10 +5799,10 @@ pub struct PermissionRequestExtensionManagement {
     pub tool_call_id: Option<String>,
 }
 
-/// A declared phase shown in a factory permission prompt.
+/// A declared phase shown in a workflow permission prompt.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FactoryPermissionPhase {
+pub struct WorkflowPermissionPhase {
     /// Optional phase detail
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
@@ -5069,31 +5810,31 @@ pub struct FactoryPermissionPhase {
     pub title: String,
 }
 
-/// Factory run or authoring permission request
+/// Workflow run or authoring permission request
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PermissionRequestFactory {
-    /// Canonical key used for scoped factory approvals
+pub struct PermissionRequestWorkflow {
+    /// Canonical key used for scoped workflow approvals
     pub approval_key: String,
-    /// Whether this factory is eligible for persistent approval
+    /// Whether this workflow is eligible for persistent approval
     pub can_persist_approval: bool,
-    /// Factory-declared AI-credit limit before any run/resume caller override is applied.
+    /// Workflow-declared AI-credit limit before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_max_ai_credits: Option<f64>,
-    /// Factory-declared concurrent-subagent limit before any run/resume caller override is applied.
+    /// Workflow-declared concurrent-subagent limit before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_max_concurrent_subagents: Option<i64>,
-    /// Factory-declared total-subagent limit before any run/resume caller override is applied.
+    /// Workflow-declared total-subagent limit before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_max_total_subagents: Option<i64>,
-    /// Factory-declared active-time limit in seconds before any run/resume caller override is applied.
+    /// Workflow-declared active-time limit in seconds before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_timeout_seconds: Option<f64>,
-    /// Factory description
+    /// Workflow description
     pub description: String,
     /// Permission kind discriminator
-    pub kind: PermissionRequestFactoryKind,
-    /// When true, managed policy requires an explicit user decision and automatic approval must be bypassed.
+    pub kind: PermissionRequestWorkflowKind,
+    /// Whether managed policy requires a human response and forbids host auto-approval
     #[serde(skip_serializing_if = "Option::is_none")]
     pub managed_approval_required: Option<bool>,
     /// Effective AI-credit limit; omitted means unlimited
@@ -5105,12 +5846,12 @@ pub struct PermissionRequestFactory {
     /// Effective total-subagent limit; omitted means unlimited
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_total_subagents: Option<i64>,
-    /// Factory name
+    /// Workflow name
     pub name: String,
-    /// Factory operation, either run or author
-    pub operation: FactoryPermissionOperation,
-    /// Declared factory phases
-    pub phases: Vec<FactoryPermissionPhase>,
+    /// Workflow operation, either run or author
+    pub operation: WorkflowPermissionOperation,
+    /// Declared workflow phases
+    pub phases: Vec<WorkflowPermissionPhase>,
     /// Effective active-time limit in seconds; omitted means unlimited
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<f64>,
@@ -5191,6 +5932,16 @@ pub struct PermissionPromptRequestCommands {
     /// True when the escalation is a permissive retry that keeps the sandbox and network policy attached while recording file and process accesses instead of blocking them.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_sandbox_permissive: Option<bool>,
+    /// Sandbox policy edit that would let the command run inside the sandbox. Only present when requestSandboxBypass is true.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sandbox_path_grant: Option<PermissionSandboxPathGrant>,
     /// Tool call ID that triggered this permission request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
@@ -5448,6 +6199,16 @@ pub struct PermissionPromptRequestPath {
     pub kind: PermissionPromptRequestPathKind,
     /// File paths that require explicit approval
     pub paths: Vec<String>,
+    /// Canonical directory candidates that can be granted for file-tool read access in this logical session. Present only for read path prompts.
+    ///
+    /// <div class="warning">
+    ///
+    /// **Experimental.** This type is part of an experimental wire-protocol surface
+    /// and may change or be removed in future SDK or CLI releases.
+    ///
+    /// </div>
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub read_only_directories: Option<Vec<String>>,
     /// Tool call ID that triggered this permission request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
@@ -5508,11 +6269,11 @@ pub struct PermissionPromptRequestExtensionManagement {
     pub tool_call_id: Option<String>,
 }
 
-/// Factory run or authoring permission prompt
+/// Workflow run or authoring permission prompt
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PermissionPromptRequestFactory {
-    /// Canonical key used for scoped factory approvals
+pub struct PermissionPromptRequestWorkflow {
+    /// Canonical key used for scoped workflow approvals
     pub approval_key: String,
     /// Assisted-approval judge information for this request; present only in assisted mode.
     ///
@@ -5524,24 +6285,24 @@ pub struct PermissionPromptRequestFactory {
     /// </div>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assisted_approval: Option<PermissionAssistedApproval>,
-    /// Whether this factory is eligible for persistent approval
+    /// Whether this workflow is eligible for persistent approval
     pub can_persist_approval: bool,
-    /// Factory-declared AI-credit limit before any run/resume caller override is applied.
+    /// Workflow-declared AI-credit limit before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_max_ai_credits: Option<f64>,
-    /// Factory-declared concurrent-subagent limit before any run/resume caller override is applied.
+    /// Workflow-declared concurrent-subagent limit before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_max_concurrent_subagents: Option<i64>,
-    /// Factory-declared total-subagent limit before any run/resume caller override is applied.
+    /// Workflow-declared total-subagent limit before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_max_total_subagents: Option<i64>,
-    /// Factory-declared active-time limit in seconds before any run/resume caller override is applied.
+    /// Workflow-declared active-time limit in seconds before any run/resume caller override is applied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub declared_timeout_seconds: Option<f64>,
-    /// Factory description
+    /// Workflow description
     pub description: String,
     /// Prompt kind discriminator
-    pub kind: PermissionPromptRequestFactoryKind,
+    pub kind: PermissionPromptRequestWorkflowKind,
     /// Whether managed policy requires a human response and forbids host auto-approval
     #[serde(skip_serializing_if = "Option::is_none")]
     pub managed_approval_required: Option<bool>,
@@ -5554,12 +6315,12 @@ pub struct PermissionPromptRequestFactory {
     /// Effective total-subagent limit; omitted means unlimited
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_total_subagents: Option<i64>,
-    /// Factory name
+    /// Workflow name
     pub name: String,
-    /// Factory operation, either run or author
-    pub operation: FactoryPermissionOperation,
-    /// Declared factory phases
-    pub phases: Vec<FactoryPermissionPhase>,
+    /// Workflow operation, either run or author
+    pub operation: WorkflowPermissionOperation,
+    /// Declared workflow phases
+    pub phases: Vec<WorkflowPermissionPhase>,
     /// Effective active-time limit in seconds; omitted means unlimited
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout_seconds: Option<f64>,
@@ -5625,11 +6386,17 @@ pub struct PermissionRequestedData {
     /// Agent mode captured from the owning turn when permission evaluation began.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_mode: Option<SessionMode>,
+    /// Permission mode captured when evaluation began. Absent on historical events.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permission_mode: Option<PermissionMode>,
     /// Details of the permission being requested
     pub permission_request: PermissionRequest,
     /// Derived user-facing permission prompt details for UI consumers
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_request: Option<PermissionPromptRequest>,
+    /// Permission-recovery episode that authorized this request to surface for interactive attention
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_episode_id: Option<String>,
     /// Unique identifier for this permission request; used to respond via session.respondToPermission()
     pub request_id: RequestId,
     /// When true, this permission was already resolved by a permissionRequest hook and requires no client action
@@ -5649,6 +6416,16 @@ pub struct PermissionApproved {
     /// Whether a managed approval policy already handled this request
     #[serde(skip_serializing_if = "Option::is_none")]
     pub managed_approval_handled: Option<bool>,
+}
+
+/// Permission response variant that approves a request and records file-tool read authority for specific directories in this logical session.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionApprovedReadOnlyForSession {
+    /// Canonical directories covered by the session read-only grant
+    pub directories: Vec<String>,
+    /// Approved with read-only directory authority for this session
+    pub kind: PermissionApprovedReadOnlyForSessionKind,
 }
 
 /// Session-scoped tool-approval rule for specific shell command identifiers.
@@ -5718,15 +6495,15 @@ pub struct UserToolSessionApprovalExtensionManagement {
     pub operation: Option<String>,
 }
 
-/// Session-scoped factory approval, optionally narrowed by approval key.
+/// Session-scoped workflow approval, optionally narrowed by approval key.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UserToolSessionApprovalFactory {
-    /// Optional factory operation name or canonical approval key
+pub struct UserToolSessionApprovalWorkflow {
+    /// Optional workflow operation name or canonical approval key
     #[serde(skip_serializing_if = "Option::is_none")]
     pub approval_key: Option<String>,
-    /// Factory approval kind
-    pub kind: UserToolSessionApprovalFactoryKind,
+    /// Workflow approval kind
+    pub kind: UserToolSessionApprovalWorkflowKind,
 }
 
 /// Session-scoped tool-approval rule for an extension's permission-gated capability access, keyed by extension name.
@@ -5862,6 +6639,9 @@ pub struct PermissionDeniedByPermissionRequestHook {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionCompletedData {
+    /// Atomic structured blocked outcome when this permission response ended an Autopilot recovery episode unsuccessfully
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocker: Option<TaskBlocker>,
     /// Who decided this permission request. Absent on completions recorded before this field existed, which consumers must treat as "not a human decision" rather than assuming one. Authorization records are minted only for `human_response`; an assisted-approval verdict, a host policy, an unattended fallback, and a hook resolution all produce the same `result` a person does, so this is the only field that distinguishes them.
     ///
     /// <div class="warning">
@@ -5872,6 +6652,9 @@ pub struct PermissionCompletedData {
     /// </div>
     #[serde(skip_serializing_if = "Option::is_none")]
     pub decision_source: Option<PermissionDecisionSource>,
+    /// Permission-recovery episode settled by this response, when the request was escalated by Autopilot
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recovery_episode_id: Option<String>,
     /// Request ID of the resolved permission request; clients should dismiss any UI for this request
     pub request_id: RequestId,
     /// The result of the permission request
@@ -5881,7 +6664,7 @@ pub struct PermissionCompletedData {
     pub tool_call_id: Option<String>,
 }
 
-/// Session event "permission.carriedForward". Records that a live authorization record from an earlier human decision in this session contained a permission proposal, so it ran without another prompt. This mints no authority: it accounts for one more effect against the prior grant, which is what lets a replayed session agree with the live one about how much of that grant is left.
+/// Session event "permission.carriedForward". Historical decode-only receipt from the retired Assisted Permissions authorization extractor. Current runtimes ignore it for permission decisions.
 ///
 /// <div class="warning">
 ///
@@ -5930,7 +6713,7 @@ pub struct PermissionCarriedForwardData {
     pub tool_call_id: String,
 }
 
-/// Session event "permission.messageAuthorization". Freezes one blinded, verbatim-verified authorization claim the runtime minted from a human user message, so a resumed session re-establishes the same grant deterministically instead of re-running the extraction model. This mints no authority on its own: it records what a blinded proposer pointed at and the trusted discriminator the runtime established, and deterministic establishment runs on replay. Persisted so recorded authority survives compaction and process resume.
+/// Session event "permission.messageAuthorization". Historical decode-only claim from the retired Assisted Permissions authorization extractor. Current runtimes preserve the payload but do not establish authority from it.
 ///
 /// <div class="warning">
 ///
@@ -6027,7 +6810,7 @@ pub struct PermissionMessageAuthorizationData {
     pub world: Option<serde_json::Value>,
 }
 
-/// Session event "permission.messageAuthorizationRead". Records that one human turn has been read by the blinded authorization proposer, whether or not it minted anything, so a resumed session does not re-run the extraction model on a turn the live session already read. Also records whether that pass activates ongoing extraction; contextual-assent-only passes do not, so unrelated future messages remain outside extraction.
+/// Session event "permission.messageAuthorizationRead". Historical decode-only extractor progress marker. Current runtimes do not run or resume extraction from it.
 ///
 /// <div class="warning">
 ///
@@ -6059,7 +6842,7 @@ pub struct PermissionMessageAuthorizationReadData {
     pub turn_index: i64,
 }
 
-/// Session event "permission.messageAuthorizationDegraded". Records that message-backed authorization could not safely represent one human turn before compaction. The runtime may compact the original message after this marker is durable, but message-derived carry-forward and assisted auto-approval remain disabled for the rest of the session so subsequent commands continue through the ordinary permission prompt.
+/// Session event "permission.messageAuthorizationDegraded". Historical decode-only degradation marker from the retired extractor. Current runtimes ignore it for permission decisions.
 ///
 /// <div class="warning">
 ///
@@ -6081,7 +6864,7 @@ pub struct PermissionMessageAuthorizationDegradedData {
     pub turn_index: i64,
 }
 
-/// Session event "permission.assentDetected". Records that deterministic text recognition found likely assent in the human turn immediately following a root Autopilot permission request that was blocked because no interactive response was available. This event grants no authority; its model-facing projection only suggests retrying the unchanged operation.
+/// Session event "permission.assentDetected". Historical decode-only contextual-assent marker. Current runtimes do not project it into the conversation or permission flow.
 ///
 /// <div class="warning">
 ///
@@ -6112,7 +6895,7 @@ pub struct PermissionAssentDetectedData {
     pub turn_index: i64,
 }
 
-/// Session event "permission.contextualAuthorization". Freezes a blinded contextual authorization proposal whose verbatim human span was deterministically bound to the immediately preceding blocked permission request. The event carries no action fields; replay re-derives the exact action from the earlier permission request and mints a one-shot message grant only when the binding and span still verify.
+/// Session event "permission.contextualAuthorization". Historical decode-only contextual authorization claim. Current runtimes preserve the payload but do not establish authority from it.
 ///
 /// <div class="warning">
 ///
@@ -6322,6 +7105,9 @@ pub struct McpOauthRequiredStaticClientConfig {
     /// Whether this is a public OAuth client
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_client: Option<bool>,
+    /// Configured OAuth scope string used when the server challenge omits scope or provides an empty scope
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scope: Option<String>,
 }
 
 /// OAuth WWW-Authenticate parameters parsed from an MCP auth challenge
@@ -6629,7 +7415,7 @@ pub struct SessionAutoModeResolvedData {
     pub sticky_override: Option<bool>,
 }
 
-/// Session event "session.managed_settings_resolved". Enterprise managed-settings resolution: the effective managed settings the session applied and which channels contributed, so SDK clients can show users what is enterprise-managed. Fires whenever managed policy is (re)applied — at session start, on resume, and on account switch. This is an ephemeral live snapshot (delivered to subscribers but not persisted to the session event log), because at session start it resolves before `session.start` is emitted. Device values take precedence over server values, then the policy helper, per ordinary key, while permissions compose restrictively across device, server, policy-helper, and SDK-client layers. The account-scoped `getManagedSettings()` API does not include session-local client injection. Marked experimental while the managed-settings surface stabilizes.
+/// Session event "session.managed_settings_resolved". Effective enterprise managed settings applied to the session and their contributing channels. Emitted whenever managed policy is applied or reapplied, including session start, resume, and account switch. This ephemeral live snapshot is delivered to subscribers but not persisted to the session event log; initial resolution occurs before session.start.
 ///
 /// <div class="warning">
 ///
@@ -6788,7 +7574,7 @@ pub struct SessionToolsUpdatedData {
 #[serde(rename_all = "camelCase")]
 pub struct SessionBackgroundTasksChangedData {}
 
-/// Session event "factory.run_updated". Ephemeral invalidation signal for a changed factory run.
+/// Session event "workflow.run_updated". Ephemeral invalidation signal for a changed workflow run.
 ///
 /// <div class="warning">
 ///
@@ -6798,14 +7584,14 @@ pub struct SessionBackgroundTasksChangedData {}
 /// </div>
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FactoryRunUpdatedData {
+pub struct WorkflowRunUpdatedData {
     /// Monotonic revision now available for the run.
     pub revision: i64,
-    /// Factory run identifier.
+    /// Workflow run identifier.
     pub run_id: String,
 }
 
-/// Session event "factory.run_started". Ephemeral signal that a factory run attempt began executing.
+/// Session event "workflow.run_started". Ephemeral signal that a workflow run attempt began executing.
 ///
 /// <div class="warning">
 ///
@@ -6815,16 +7601,16 @@ pub struct FactoryRunUpdatedData {
 /// </div>
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FactoryRunStartedData {
+pub struct WorkflowRunStartedData {
     /// Attempt number this start committed; a resumed run increments it.
     pub attempt: i64,
-    /// Name of the factory this run executes. Low cardinality by construction.
-    pub factory_name: String,
-    /// Identifier of the factory run that started.
+    /// Identifier of the workflow run that started.
     pub run_id: String,
+    /// Name of the workflow this run executes. Low cardinality by construction.
+    pub workflow_name: String,
 }
 
-/// Session event "factory.run_settled". Ephemeral signal that a factory run reached a terminal status.
+/// Session event "workflow.run_settled". Ephemeral signal that a workflow run reached a terminal status.
 ///
 /// <div class="warning">
 ///
@@ -6834,20 +7620,20 @@ pub struct FactoryRunStartedData {
 /// </div>
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct FactoryRunSettledData {
+pub struct WorkflowRunSettledData {
     /// AI credits this run consumed, in nano-AIU.
     pub consumed_nano_aiu: i64,
     /// Subagents this run consumed against its limits.
     pub consumed_subagents: i64,
     /// Active milliseconds accumulated across every attempt of this run.
     pub elapsed_ms: i64,
-    /// Typed failure class recorded on the run, when it failed with one (e.g. `factory_limit_reached`).
+    /// Typed failure class recorded on the run, when it failed with one (e.g. `workflow_limit_reached`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_type: Option<String>,
-    /// Identifier of the factory run that settled.
+    /// Identifier of the workflow run that settled.
     pub run_id: String,
     /// Terminal status the run committed.
-    pub status: FactoryRunSettledStatus,
+    pub status: WorkflowRunSettledStatus,
 }
 
 /// A single resolved skill in `session.skills_loaded`, including source, invocability, enabled state, path, and argument hint.
@@ -6978,9 +7764,15 @@ pub struct SessionMcpServersLoadedData {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionMcpServerStatusChangedData {
+    /// Runtime configuration provenance for a failed connection, or unknown when unavailable. Additional string values may be introduced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub config_source: Option<String>,
     /// Error message if the server entered a failed state
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// Runtime-produced classification for the final failed connection; unclassified means no classification was supplied. Additional string values may be introduced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_classification: Option<String>,
     /// Name of the MCP server whose status changed
     pub server_name: String,
     /// Connection status: connected, failed, needs-auth, pending, disabled, stopped, or not_configured
@@ -7300,6 +8092,9 @@ pub struct McpAppToolCallCompleteData {
     pub tool_name: String,
 }
 
+/// Session event "session.indexed_search". Transient indexed-search status and diagnostics from the live runtime service. Never persisted or used to infer activation from session history.
+pub type SessionIndexedSearchData = IndexedSearchData;
+
 /// Routing preference used when the session model is `auto`. `fast` is an integrator-only latency preset and is not a first-party GitHub Copilot product preference.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AutoTier {
@@ -7483,6 +8278,168 @@ pub enum AutopilotObjectiveChangedStatus {
     Unknown,
 }
 
+/// Indexed-search event variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchDataStatusKind {
+    #[serde(rename = "status")]
+    #[default]
+    Status,
+}
+
+/// Live indexed-search state for this session activation, never inferred from persisted history.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchState {
+    /// Indexed search is not active for this session.
+    #[serde(rename = "disabled")]
+    Disabled,
+    /// Indexed-search startup is in progress.
+    #[serde(rename = "starting")]
+    Starting,
+    /// The indexed-search server started successfully; its index may still be warming.
+    #[serde(rename = "enabled")]
+    Enabled,
+    /// The indexed-search server and its index are ready.
+    #[serde(rename = "ready")]
+    Ready,
+    /// Indexed-search startup or the active server failed.
+    #[serde(rename = "failed")]
+    Failed,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Configuration, policy, or workspace condition that disabled indexed search.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchDisabledReason {
+    /// Indexed search was explicitly disabled by the environment.
+    #[serde(rename = "use_tgrep_false")]
+    UseTgrepFalse,
+    /// Search uses the external ripgrep binary instead of bundled search.
+    #[serde(rename = "use_builtin_ripgrep_false")]
+    UseBuiltinRipgrepFalse,
+    /// Organization policy disables indexed search.
+    #[serde(rename = "organization")]
+    Organization,
+    /// Authentication has not resolved organization policy.
+    #[serde(rename = "organization_policy_auth_pending")]
+    OrganizationPolicyAuthPending,
+    /// Organization policy could not be determined.
+    #[serde(rename = "organization_policy_unknown")]
+    OrganizationPolicyUnknown,
+    /// The workspace uses a virtualized or network filesystem.
+    #[serde(rename = "virtual_filesystem")]
+    VirtualFilesystem,
+    /// The workspace is inside a Windows cloud-sync root.
+    #[serde(rename = "cloud_sync_root")]
+    CloudSyncRoot,
+    /// The Windows cloud-sync safety check failed.
+    #[serde(rename = "cloud_sync_detection_failed")]
+    CloudSyncDetectionFailed,
+    /// The workspace is not available on the runtime's local filesystem.
+    #[serde(rename = "workspace_not_local")]
+    WorkspaceNotLocal,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Indexed-search event variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchDataStartupKind {
+    #[serde(rename = "startup")]
+    #[default]
+    Startup,
+}
+
+/// Result of an indexed-search startup attempt.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchOutcome {
+    /// A new indexed-search server was started.
+    #[serde(rename = "started")]
+    Started,
+    /// The repository has too few files for automatic indexing.
+    #[serde(rename = "skipped_below_threshold")]
+    SkippedBelowThreshold,
+    /// No Git repository was found and indexing was not forced.
+    #[serde(rename = "skipped_no_gitroot")]
+    SkippedNoGitroot,
+    /// Configuration, policy, or workspace safety disabled indexing.
+    #[serde(rename = "skipped_disabled")]
+    SkippedDisabled,
+    /// An existing indexed-search server was reused.
+    #[serde(rename = "reused_existing")]
+    ReusedExisting,
+    /// The startup attempt failed.
+    #[serde(rename = "failed")]
+    Failed,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Category of an indexed-search server failure.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchErrorType {
+    /// The indexed-search server could not be spawned.
+    #[serde(rename = "spawn_error")]
+    SpawnError,
+    /// The indexed-search server exited unexpectedly.
+    #[serde(rename = "unexpected_exit")]
+    UnexpectedExit,
+    /// The indexed-search server was terminated by a signal.
+    #[serde(rename = "killed_by_signal")]
+    KilledBySignal,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Indexed-search event variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchDataServerErrorKind {
+    #[serde(rename = "server_error")]
+    #[default]
+    ServerError,
+}
+
+/// Indexed-search event variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchDataIncrementalKind {
+    #[serde(rename = "incremental")]
+    #[default]
+    Incremental,
+}
+
+/// Phase of an incremental indexed-search update.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexedSearchIncrementalPhase {
+    /// A workspace scan found changes to index.
+    #[serde(rename = "changes_detected")]
+    ChangesDetected,
+    /// The incremental index update completed.
+    #[serde(rename = "updated")]
+    Updated,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Transient indexed-search status and diagnostics from the live runtime service. Never persisted or used to infer activation from session history.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum IndexedSearchData {
+    Status(IndexedSearchDataStatus),
+    Startup(IndexedSearchDataStartup),
+    ServerError(IndexedSearchDataServerError),
+    Incremental(IndexedSearchDataIncremental),
+}
+
 /// Origin of an effective session model change.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelChangeSource {
@@ -7516,9 +8473,27 @@ pub enum ModelChangeSource {
     /// The runtime selected the model automatically, such as rate-limit recovery or refusal fallback.
     #[serde(rename = "automatic")]
     Automatic,
+    /// The user selected the promoted model from the changeboarding card or its keyboard shortcut.
+    #[serde(rename = "changeboarding_shortcut")]
+    ChangeboardingShortcut,
     /// An SDK or RPC caller selected the model.
     #[serde(rename = "sdk")]
     Sdk,
+    /// The user accepted a CAPI-issued Auto tier recommendation.
+    #[serde(rename = "auto_tier_recommendation")]
+    AutoTierRecommendation,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Why the session no longer has an explicitly selected model.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModelDeselectedReason {
+    /// A host-managed provider snapshot no longer publishes the selected model.
+    #[serde(rename = "provider_withdrawn")]
+    ProviderWithdrawn,
     /// Unknown variant for forward compatibility.
     #[default]
     #[serde(other)]
@@ -7670,6 +8645,159 @@ pub enum CompactionTrigger {
     /// Compaction requested while switching to a model with a smaller context window.
     #[serde(rename = "model_switch")]
     ModelSwitch,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Category of structured task blocker
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TaskBlockerKind {
+    /// Autopilot permission recovery requires intervention or has no safe autonomous path.
+    #[serde(rename = "permission_recovery")]
+    PermissionRecovery,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Runtime handling applied to a recovery attempt
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionRecoveryAttemptDisposition {
+    /// The request was denied without prompting so the agent could try an alternative.
+    #[serde(rename = "deferred")]
+    Deferred,
+    /// The request was surfaced to an interactive responder.
+    #[serde(rename = "prompted")]
+    Prompted,
+    /// The interactive responder approved the request.
+    #[serde(rename = "approved")]
+    Approved,
+    /// The interactive responder denied the request or became unavailable.
+    #[serde(rename = "denied")]
+    Denied,
+    /// The request exhausted unattended recovery and produced a blocked outcome.
+    #[serde(rename = "blocked")]
+    Blocked,
+    /// A tool call succeeded as an equivalent alternative.
+    #[serde(rename = "succeeded")]
+    Succeeded,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Controlled reason for an individual attempt disposition
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionRecoveryAttemptReason {
+    /// The attempt required permission that Assisted Permissions could not grant.
+    #[serde(rename = "permission_required")]
+    PermissionRequired,
+    /// The request repeated an earlier attempt.
+    #[serde(rename = "repeated_attempt")]
+    RepeatedAttempt,
+    /// The request exceeded the bounded number of distinct attempts.
+    #[serde(rename = "attempts_exhausted")]
+    AttemptsExhausted,
+    /// The interactive responder approved the request.
+    #[serde(rename = "permission_approved")]
+    PermissionApproved,
+    /// The interactive responder denied the request.
+    #[serde(rename = "permission_denied")]
+    PermissionDenied,
+    /// The interactive responder became unavailable.
+    #[serde(rename = "responder_unavailable")]
+    ResponderUnavailable,
+    /// The tool call succeeded without the blocked permission.
+    #[serde(rename = "equivalent_alternative_succeeded")]
+    EquivalentAlternativeSucceeded,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Relationship of an attempt to earlier permission requests
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionRecoveryAttemptRelation {
+    /// The first denied permission request in the episode.
+    #[serde(rename = "initial")]
+    Initial,
+    /// A request equivalent to an earlier attempt.
+    #[serde(rename = "retry")]
+    Retry,
+    /// A distinct request or a successful alternative tool call.
+    #[serde(rename = "alternative")]
+    Alternative,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Action selected when autonomous recovery cannot continue
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionRecoveryOnBlocked {
+    /// Surface the existing permission prompt to a response-capable client.
+    #[serde(rename = "ask")]
+    Ask,
+    /// Return a structured unsuccessful blocked outcome because no responder is available.
+    #[serde(rename = "fail")]
+    Fail,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Controlled reason for a permission-recovery episode transition
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionRecoveryReason {
+    /// An action required permission that Assisted Permissions could not grant.
+    #[serde(rename = "permission_required")]
+    PermissionRequired,
+    /// The agent repeated an equivalent permission request instead of making progress.
+    #[serde(rename = "repeated_attempt")]
+    RepeatedAttempt,
+    /// The bounded number of distinct permission attempts was exhausted.
+    #[serde(rename = "attempts_exhausted")]
+    AttemptsExhausted,
+    /// A responder approved the escalated permission request.
+    #[serde(rename = "permission_approved")]
+    PermissionApproved,
+    /// A responder denied the escalated permission request.
+    #[serde(rename = "permission_denied")]
+    PermissionDenied,
+    /// The response-capable client became unavailable while escalation was pending.
+    #[serde(rename = "responder_unavailable")]
+    ResponderUnavailable,
+    /// A later tool call succeeded without requiring the blocked permission.
+    #[serde(rename = "equivalent_alternative_succeeded")]
+    EquivalentAlternativeSucceeded,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Lifecycle state of a permission-recovery episode
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionRecoveryStatus {
+    /// Autopilot may try a bounded equivalent alternative.
+    #[serde(rename = "recovering")]
+    Recovering,
+    /// An interactive permission response is required.
+    #[serde(rename = "awaiting_approval")]
+    AwaitingApproval,
+    /// The episode ended through approval or a successful equivalent alternative.
+    #[serde(rename = "resolved")]
+    Resolved,
+    /// No autonomous path remains and the task requires intervention.
+    #[serde(rename = "blocked")]
+    Blocked,
     /// Unknown variant for forward compatibility.
     #[default]
     #[serde(other)]
@@ -8164,6 +9292,39 @@ pub enum ModelCallFailureSource {
     Unknown,
 }
 
+/// Final bounded result of one logical model operation after its internal retry loop settles
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModelCallFinalResult {
+    /// The final attempt succeeded.
+    #[serde(rename = "success")]
+    Success,
+    /// The final attempt failed with HTTP 400.
+    #[serde(rename = "http_400")]
+    Http400,
+    /// The final attempt failed with HTTP 413.
+    #[serde(rename = "http_413")]
+    Http413,
+    /// The final attempt failed with HTTP 429.
+    #[serde(rename = "http_429")]
+    Http429,
+    /// The final attempt failed with another HTTP 4xx status.
+    #[serde(rename = "http_4xx")]
+    Http4xx,
+    /// The final attempt failed with an HTTP 5xx status.
+    #[serde(rename = "http_5xx")]
+    Http5xx,
+    /// The final attempt failed in the request transport.
+    #[serde(rename = "transport_error")]
+    TransportError,
+    /// The final attempt failed without another bounded classification.
+    #[serde(rename = "other_error")]
+    OtherError,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
 /// Final outcome of one logical model dispatch after response acceptance processing
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ModelCallFinishedOutcome {
@@ -8467,6 +9628,390 @@ pub enum SkillInvokedTrigger {
     Unknown,
 }
 
+/// Process-containment backend selected for the host platform
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxBackend {
+    /// Apple Seatbelt process sandbox.
+    #[serde(rename = "seatbelt")]
+    Seatbelt,
+    /// Linux Bubblewrap process sandbox.
+    #[serde(rename = "bubblewrap")]
+    Bubblewrap,
+    /// Windows ProcessContainer sandbox.
+    #[serde(rename = "process_container")]
+    ProcessContainer,
+    /// No supported process-containment backend is available.
+    #[serde(rename = "unsupported")]
+    Unsupported,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Customer-controllable sandbox governance area
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxControl {
+    /// Process containment and sandbox spawn behavior.
+    #[serde(rename = "process")]
+    Process,
+    /// Filesystem read, write, and deny policy.
+    #[serde(rename = "filesystem")]
+    Filesystem,
+    /// Outbound and local-network access policy.
+    #[serde(rename = "network")]
+    Network,
+    /// Selection of the sandbox or built-in enforcement route.
+    #[serde(rename = "routing")]
+    Routing,
+    /// Decisions to run outside the process sandbox, whether requested by the model or resolved by a person.
+    #[serde(rename = "bypass")]
+    Bypass,
+    /// Credential and keychain capability injection.
+    #[serde(rename = "credentials")]
+    Credentials,
+    /// Host-platform and backend support behavior.
+    #[serde(rename = "platform")]
+    Platform,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Finite reason why sandbox enforcement is weaker than configured
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDegradationReason {
+    /// The selected backend cannot enforce per-path deny rules.
+    #[serde(rename = "denied_paths_unsupported")]
+    DeniedPathsUnsupported,
+    /// The host platform has no supported process-containment backend.
+    #[serde(rename = "unsupported_platform")]
+    UnsupportedPlatform,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Runtime boundary that enforced or routed a sandbox decision
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxEnforcementPoint {
+    /// Shell command process containment.
+    #[serde(rename = "shell")]
+    Shell,
+    /// Built-in filesystem policy enforcement.
+    #[serde(rename = "builtin_filesystem")]
+    BuiltinFilesystem,
+    /// Search-tool sandbox or policy enforcement.
+    #[serde(rename = "search")]
+    Search,
+    /// Web-fetch network policy enforcement.
+    #[serde(rename = "web_fetch")]
+    WebFetch,
+    /// Model Context Protocol server routing.
+    #[serde(rename = "mcp")]
+    Mcp,
+    /// Language server process routing.
+    #[serde(rename = "lsp")]
+    Lsp,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataPolicyResolvedKind {
+    #[serde(rename = "policy_resolved")]
+    #[default]
+    PolicyResolved,
+}
+
+/// Finite result of a sandbox decision. Each `SandboxDecisionData` variant uses a disjoint subset: `policy_resolved` is `resolved | degraded`, `spawn_completed` and `permissive_retry_completed` are `succeeded | failed`, `enforcement_state` is `engaged | inactive | failed`, `access_denied` is `denied`, `access_recorded` is `allowed`, and escalation decisions are `approved | declined`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxOutcome {
+    /// The sandbox policy resolved successfully. Describes configuration only and makes no claim that a backend engaged.
+    #[serde(rename = "resolved")]
+    Resolved,
+    /// No sandbox governed the workload.
+    #[serde(rename = "inactive")]
+    Inactive,
+    /// A runtime-owned containment backend accepted the workload. Evidence of engagement, not of verified containment for the workload's lifetime.
+    #[serde(rename = "engaged")]
+    Engaged,
+    /// The sandbox operation completed successfully.
+    #[serde(rename = "succeeded")]
+    Succeeded,
+    /// The sandbox operation failed.
+    #[serde(rename = "failed")]
+    Failed,
+    /// The sandbox is active with one or more controls weakened by platform limitations or an explicitly selected relaxed mode.
+    #[serde(rename = "degraded")]
+    Degraded,
+    /// An enforcement check refused the requested access.
+    #[serde(rename = "denied")]
+    Denied,
+    /// A request to run outside the process sandbox was granted.
+    #[serde(rename = "approved")]
+    Approved,
+    /// A request to run outside the process sandbox was not granted.
+    #[serde(rename = "declined")]
+    Declined,
+    /// Permissive learning mode recorded an access the enforced policy would have refused, and allowed it.
+    #[serde(rename = "allowed")]
+    Allowed,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Host operating-system family used for sandbox enforcement
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxPlatform {
+    /// Apple macOS host.
+    #[serde(rename = "macos")]
+    Macos,
+    /// Linux host.
+    #[serde(rename = "linux")]
+    Linux,
+    /// Microsoft Windows host.
+    #[serde(rename = "windows")]
+    Windows,
+    /// Host platform outside the explicitly supported families.
+    #[serde(rename = "other")]
+    Other,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Origin of the effective sandbox policy
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxPolicySource {
+    /// Runtime default sandbox policy.
+    #[serde(rename = "default_policy")]
+    DefaultPolicy,
+    /// User-configured sandbox policy merged with runtime-required grants.
+    #[serde(rename = "user_policy")]
+    UserPolicy,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Bounded classification of effective sandbox proxy routing
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxProxyMode {
+    /// No sandbox proxy is configured.
+    #[serde(rename = "none")]
+    None,
+    /// Traffic routes through a loopback proxy.
+    #[serde(rename = "loopback")]
+    Loopback,
+    /// Traffic routes through a non-loopback proxy endpoint.
+    #[serde(rename = "external")]
+    External,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataSpawnCompletedKind {
+    #[serde(rename = "spawn_completed")]
+    #[default]
+    SpawnCompleted,
+}
+
+/// Runtime observation backing an enforcement-state or denial claim. Absent on `enforcement_state` when no observation backs the state.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxAttestation {
+    /// A containment backend accepted and applied the spawn request.
+    #[serde(rename = "spawn_succeeded")]
+    SpawnSucceeded,
+    /// The spawn was refused for lack of a usable containment backend.
+    #[serde(rename = "unsupported")]
+    Unsupported,
+    /// A runtime-owned policy check ran and returned a verdict. Attests the check, not that the caller honoured it.
+    #[serde(rename = "builtin_policy_checked")]
+    BuiltinPolicyChecked,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataEnforcementStateKind {
+    #[serde(rename = "enforcement_state")]
+    #[default]
+    EnforcementState,
+}
+
+/// How strong the evidence behind a denial is. A denial the sandbox itself recorded is a fact; one inferred from a command's output text is a judgement, and an analysis that cannot tell them apart will treat a false positive as enforcement.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDenialConfidence {
+    /// The sandbox's own denial capture recorded the refused access. The strongest evidence available: the kernel observed it, not the runtime.
+    #[serde(rename = "captured")]
+    Captured,
+    /// The command named a path that the effective policy independently denies. No capture confirmed it, but the policy did.
+    #[serde(rename = "policy_corroborated")]
+    PolicyCorroborated,
+    /// The failure carried a fingerprint the sandbox itself emits, so the sandbox is known to have refused something even though the resource was not confirmed.
+    #[serde(rename = "sandbox_reported")]
+    SandboxReported,
+    /// Classified from the command's own output text alone. The weakest evidence: a command that merely prints sandbox-like wording reaches this level.
+    #[serde(rename = "output_classified")]
+    OutputClassified,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Bounded class of access an enforcement check refused. Raw resources, commands, and process names accompany it only when content capture is enabled; diagnostic text and matched rules are never exported.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDenialClass {
+    /// A read was refused because the effective policy does not grant it.
+    #[serde(rename = "filesystem_read")]
+    FilesystemRead,
+    /// A write was refused. Distinct from `filesystem_read` because a read-only grant denies writes to a path it otherwise permits.
+    #[serde(rename = "filesystem_write")]
+    FilesystemWrite,
+    /// A process could not start because the sandbox refused a required process-scoped resource. Currently emitted for the Windows MSYS `BaseNamedObjects` fork failure confirmed by learning-mode capture.
+    #[serde(rename = "process_startup")]
+    ProcessStartup,
+    /// Windows registry access was refused and correlated with capture evidence.
+    #[serde(rename = "registry_access")]
+    RegistryAccess,
+    /// Windows ALPC or RPC access was refused and correlated with capture evidence.
+    #[serde(rename = "ipc_access")]
+    IpcAccess,
+    /// Access to another Windows process was refused and correlated with capture evidence.
+    #[serde(rename = "process_access")]
+    ProcessAccess,
+    /// Windows job-object access was refused and correlated with capture evidence.
+    #[serde(rename = "job_access")]
+    JobAccess,
+    /// Windows UI-handle access was refused and correlated with capture evidence.
+    #[serde(rename = "ui_access")]
+    UiAccess,
+    /// Windows service-control-manager access was refused and correlated with capture evidence.
+    #[serde(rename = "service_access")]
+    ServiceAccess,
+    /// An outbound connection was refused by `network.allowOutbound`.
+    #[serde(rename = "network_outbound")]
+    NetworkOutbound,
+    /// A connection to a local or loopback destination was refused by `network.allowLocalNetwork`.
+    #[serde(rename = "network_local")]
+    NetworkLocal,
+    /// A destination was refused by the sandbox host allow/deny rules.
+    #[serde(rename = "network_host")]
+    NetworkHost,
+    /// The sandbox's denial capture recorded a refusal its record does not attribute to a more specific control: an unclassified resource (registry, COM, section object) or an AppContainer capability with no network meaning. Deliberately generic — the capture proves the denial happened, and naming a narrower class than the record supports would be a guess.
+    #[serde(rename = "other_access")]
+    OtherAccess,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataAccessDeniedKind {
+    #[serde(rename = "access_denied")]
+    #[default]
+    AccessDenied,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataAccessRecordedKind {
+    #[serde(rename = "access_recorded")]
+    #[default]
+    AccessRecorded,
+}
+
+/// Why a sandboxed run recorded and allowed its process-container access checks instead of enforcing them.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxPermissiveSource {
+    /// A person approved the permissive retry for this command after a sandboxed attempt was blocked.
+    #[serde(rename = "approved_retry")]
+    ApprovedRetry,
+    /// Device-managed policy (`sandbox.learningMode: "allow"`) starts sandboxed shell commands in permissive learning mode.
+    #[serde(rename = "policy")]
+    Policy,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataBypassDecidedKind {
+    #[serde(rename = "bypass_decided")]
+    #[default]
+    BypassDecided,
+}
+
+/// Where a request to run outside the process sandbox originated. Orthogonal to the outcome: the same verdict means a different thing depending on where the request came from.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxBypassSource {
+    /// No longer produced. The model could once ask for a bypass in the tool call itself; no tool exposes that parameter now. Retained so historical events still deserialize.
+    #[serde(rename = "model_requested")]
+    ModelRequested,
+    /// The runtime raised the prompt itself — either after a sandboxed attempt looked blocked, or before a run the sandbox cannot enforce at all, such as a detached command — and a person answered it. In the second case nothing had executed when the decision was made.
+    #[serde(rename = "user_prompted")]
+    UserPrompted,
+    /// The runtime raised the prompt itself — after a sandboxed attempt looked blocked, or before a run it cannot enforce — but the permission flow produced no confirmed human answer. This includes unavailable or unreadable prompts, cancellation, and automated rule, hook, or content-exclusion denials.
+    #[serde(rename = "prompt_unavailable")]
+    PromptUnavailable,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataPermissiveRetryDecidedKind {
+    #[serde(rename = "permissive_retry_decided")]
+    #[default]
+    PermissiveRetryDecided,
+}
+
+/// Sandbox decision variant discriminator.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SandboxDecisionDataPermissiveRetryCompletedKind {
+    #[serde(rename = "permissive_retry_completed")]
+    #[default]
+    PermissiveRetryCompleted,
+}
+
+/// Payload of `sandbox.decision`, a bounded governance record of what the process sandbox was configured to do and whether it took effect. Discriminated by `kind`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SandboxDecisionData {
+    PolicyResolved(SandboxDecisionDataPolicyResolved),
+    SpawnCompleted(SandboxDecisionDataSpawnCompleted),
+    EnforcementState(SandboxDecisionDataEnforcementState),
+    AccessDenied(SandboxDecisionDataAccessDenied),
+    AccessRecorded(SandboxDecisionDataAccessRecorded),
+    BypassDecided(SandboxDecisionDataBypassDecided),
+    PermissiveRetryDecided(SandboxDecisionDataPermissiveRetryDecided),
+    PermissiveRetryCompleted(SandboxDecisionDataPermissiveRetryCompleted),
+}
+
 /// Authority or runtime mechanism responsible for sub-agent model selection.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SubagentModelSelectionSource {
@@ -8556,6 +10101,21 @@ pub enum PermissionRequestShellKind {
     Shell,
 }
 
+/// Access a sandbox path grant confers
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionSandboxPathGrantAccess {
+    /// Read access: the path is added to readonlyPaths.
+    #[serde(rename = "read")]
+    Read,
+    /// Read and write access: the path is added to readwritePaths.
+    #[serde(rename = "readWrite")]
+    ReadWrite,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
 /// Permission kind discriminator
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PermissionRequestWriteKind {
@@ -8616,6 +10176,144 @@ pub enum PermissionRequestMemoryAction {
     /// Vote on an existing memory.
     #[serde(rename = "vote")]
     Vote,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Stage that produced this attribution.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionApprovalEvaluationEvaluationStage {
+    /// The attribution stage is unknown.
+    #[serde(rename = "unknown")]
+    UnknownValue,
+    /// The request resolved before assisted-approval evaluation.
+    #[serde(rename = "not_reached")]
+    NotReached,
+    /// A runtime gate skipped the judge.
+    #[serde(rename = "pre_judge")]
+    PreJudge,
+    /// The judge interface produced the evaluation.
+    #[serde(rename = "judge")]
+    Judge,
+    /// A cached recommendation or another request's outcome was reused.
+    #[serde(rename = "reuse")]
+    Reuse,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Status of the local judge interface, not proof of a model network call.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionApprovalEvaluationJudgeStatus {
+    /// No authoritative attribution is available.
+    #[serde(rename = "unknown")]
+    UnknownValue,
+    /// This evaluation did not invoke the judge interface.
+    #[serde(rename = "not_called")]
+    NotCalled,
+    /// The judge interface returned a usable verdict.
+    #[serde(rename = "completed")]
+    Completed,
+    /// The judge interface returned an error.
+    #[serde(rename = "failed")]
+    Failed,
+    /// This evaluation reused a cached recommendation.
+    #[serde(rename = "cached")]
+    Cached,
+    /// This request inherited another decision without local judge attribution.
+    #[serde(rename = "inherited")]
+    Inherited,
+    /// Unknown variant for forward compatibility.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Machine-readable runtime gate reason, never a command, path or human rationale.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionApprovalEvaluationReasonCode {
+    /// Attribution is missing or outside the supported vocabulary.
+    #[serde(rename = "unknown")]
+    UnknownValue,
+    /// The request resolved before assisted-approval evaluation.
+    #[serde(rename = "not-reached")]
+    NotReached,
+    /// Assisted approval was inactive for this request.
+    #[serde(rename = "inactive")]
+    Inactive,
+    /// The judge was skipped because authorization extraction could not safely establish a complete recent history.
+    #[serde(rename = "authorization-history-incomplete")]
+    AuthorizationHistoryIncomplete,
+    /// Managed policy required a human decision.
+    #[serde(rename = "managed-approval-required")]
+    ManagedApprovalRequired,
+    /// The request asked to bypass sandbox restrictions.
+    #[serde(rename = "sandbox-bypass")]
+    SandboxBypass,
+    /// An action field exceeded the judge input limit.
+    #[serde(rename = "action-too-long")]
+    ActionTooLong,
+    /// The script path was not authorized for inspection.
+    #[serde(rename = "path-not-authorized")]
+    PathNotAuthorized,
+    /// The script working directory was invalid.
+    #[serde(rename = "invalid-working-directory")]
+    InvalidWorkingDirectory,
+    /// The script snapshot could not be read.
+    #[serde(rename = "unreadable")]
+    Unreadable,
+    /// The script path was not a regular file.
+    #[serde(rename = "not-regular-file")]
+    NotRegularFile,
+    /// The script snapshot exceeded the size limit.
+    #[serde(rename = "too-large")]
+    TooLarge,
+    /// The script snapshot was not UTF-8.
+    #[serde(rename = "non-utf8")]
+    NonUtf8,
+    /// The script interpreter could not be inspected.
+    #[serde(rename = "interpreter-unavailable")]
+    InterpreterUnavailable,
+    /// The interpreter snapshot exceeded the size limit.
+    #[serde(rename = "interpreter-too-large")]
+    InterpreterTooLarge,
+    /// The shell environment could not be reviewed.
+    #[serde(rename = "shell-environment-unreviewable")]
+    ShellEnvironmentUnreviewable,
+    /// A script path could not be represented for review.
+    #[serde(rename = "unrepresentable-path")]
+    UnrepresentablePath,
+    /// An interpreter wrapped a script that could not be reviewed.
+    #[serde(rename = "interpreter-wrapped-script")]
+    InterpreterWrappedScript,
+    /// The script invocation could not be reviewed.
+    #[serde(rename = "unreviewable-script-invocation")]
+    UnreviewableScriptInvocation,
+    /// The script argument binding could not be reviewed.
+    #[serde(rename = "argument-binding-unreviewable")]
+    ArgumentBindingUnreviewable,
+    /// The script review metadata was malformed.
+    #[serde(rename = "malformed-script-action-review")]
+    MalformedScriptActionReview,
+    /// The script snapshot manifest was malformed.
+    #[serde(rename = "malformed-script-action-manifest")]
+    MalformedScriptActionManifest,
+    /// Script review was unavailable.
+    #[serde(rename = "unavailable")]
+    Unavailable,
+    /// The judge interface returned a usable verdict.
+    #[serde(rename = "judge-verdict")]
+    JudgeVerdict,
+    /// The judge interface returned an error.
+    #[serde(rename = "judge-error")]
+    JudgeError,
+    /// The request inherited an outcome from another decision.
+    #[serde(rename = "inherited")]
+    Inherited,
     /// Unknown variant for forward compatibility.
     #[default]
     #[serde(other)]
@@ -8745,19 +10443,19 @@ pub enum PermissionRequestExtensionManagementKind {
 
 /// Permission kind discriminator
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PermissionRequestFactoryKind {
-    #[serde(rename = "factory")]
+pub enum PermissionRequestWorkflowKind {
+    #[serde(rename = "workflow")]
     #[default]
-    Factory,
+    Workflow,
 }
 
-/// Operation gated by a factory permission request.
+/// Operation gated by a workflow permission request.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FactoryPermissionOperation {
-    /// Running a registered factory, which spends subagents, active time, and AI credits under the approved limits.
+pub enum WorkflowPermissionOperation {
+    /// Running a registered workflow, which spends subagents, active time, and AI credits under the approved limits.
     #[serde(rename = "run")]
     Run,
-    /// Authoring a factory, which writes JavaScript into a session-scoped extension and loads it.
+    /// Authoring a workflow, which writes JavaScript into a session-scoped extension and loads it.
     #[serde(rename = "author")]
     Author,
     /// Unknown variant for forward compatibility.
@@ -8795,7 +10493,7 @@ pub enum PermissionRequest {
     CustomTool(PermissionRequestCustomTool),
     Hook(PermissionRequestHook),
     ExtensionManagement(PermissionRequestExtensionManagement),
-    Factory(PermissionRequestFactory),
+    Workflow(PermissionRequestWorkflow),
     ExtensionPermissionAccess(PermissionRequestExtensionPermissionAccess),
     ExtensionEnvAccess(PermissionRequestExtensionEnvAccess),
 }
@@ -8900,10 +10598,10 @@ pub enum PermissionPromptRequestExtensionManagementKind {
 
 /// Prompt kind discriminator
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PermissionPromptRequestFactoryKind {
-    #[serde(rename = "factory")]
+pub enum PermissionPromptRequestWorkflowKind {
+    #[serde(rename = "workflow")]
     #[default]
-    Factory,
+    Workflow,
 }
 
 /// Prompt kind discriminator
@@ -8936,7 +10634,7 @@ pub enum PermissionPromptRequest {
     Path(PermissionPromptRequestPath),
     Hook(PermissionPromptRequestHook),
     ExtensionManagement(PermissionPromptRequestExtensionManagement),
-    Factory(PermissionPromptRequestFactory),
+    Workflow(PermissionPromptRequestWorkflow),
     ExtensionPermissionAccess(PermissionPromptRequestExtensionPermissionAccess),
     ExtensionEnvAccess(PermissionPromptRequestExtensionEnvAccess),
 }
@@ -8956,7 +10654,7 @@ pub enum PermissionDecisionSource {
     /// The host denied the request because no interactive user response was available.
     #[serde(rename = "unattended_fallback")]
     UnattendedFallback,
-    /// A live authorization record from an earlier human decision in this session contained the proposal, so it ran without another prompt. This is not a new human decision and never mints authority of its own.
+    /// Historical compatibility value for sessions created while authorization carry-forward was executable. Current runtimes do not produce this source.
     #[serde(rename = "authorization_carry_forward")]
     AuthorizationCarryForward,
     /// Unknown variant for forward compatibility.
@@ -8971,6 +10669,14 @@ pub enum PermissionApprovedKind {
     #[serde(rename = "approved")]
     #[default]
     Approved,
+}
+
+/// Approved with read-only directory authority for this session
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PermissionApprovedReadOnlyForSessionKind {
+    #[serde(rename = "approved-read-only-for-session")]
+    #[default]
+    ApprovedReadOnlyForSession,
 }
 
 /// Command approval kind
@@ -9029,12 +10735,12 @@ pub enum UserToolSessionApprovalExtensionManagementKind {
     ExtensionManagement,
 }
 
-/// Factory approval kind
+/// Workflow approval kind
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum UserToolSessionApprovalFactoryKind {
-    #[serde(rename = "factory")]
+pub enum UserToolSessionApprovalWorkflowKind {
+    #[serde(rename = "workflow")]
     #[default]
-    Factory,
+    Workflow,
 }
 
 /// Extension permission access approval kind
@@ -9064,7 +10770,7 @@ pub enum UserToolSessionApproval {
     Memory(UserToolSessionApprovalMemory),
     CustomTool(UserToolSessionApprovalCustomTool),
     ExtensionManagement(UserToolSessionApprovalExtensionManagement),
-    Factory(UserToolSessionApprovalFactory),
+    Workflow(UserToolSessionApprovalWorkflow),
     ExtensionPermissionAccess(UserToolSessionApprovalExtensionPermissionAccess),
     ExtensionEnvAccess(UserToolSessionApprovalExtensionEnvAccess),
 }
@@ -9138,6 +10844,7 @@ pub enum PermissionDeniedByPermissionRequestHookKind {
 #[serde(untagged)]
 pub enum PermissionResult {
     Approved(PermissionApproved),
+    ApprovedReadOnlyForSession(PermissionApprovedReadOnlyForSession),
     ApprovedForSession(PermissionApprovedForSession),
     ApprovedForLocation(PermissionApprovedForLocation),
     Cancelled(PermissionCancelled),
@@ -9150,7 +10857,7 @@ pub enum PermissionResult {
     DeniedByPermissionRequestHook(PermissionDeniedByPermissionRequestHook),
 }
 
-/// Which direction a message-backed authorization claim moves authority in.
+/// Direction stored in a historical extractor claim. Current runtimes do not apply it.
 ///
 /// <div class="warning">
 ///
@@ -9160,10 +10867,10 @@ pub enum PermissionResult {
 /// </div>
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PermissionMessageAuthorizationPolarity {
-    /// The human's words authorized an effect.
+    /// Historical claim recorded as a grant.
     #[serde(rename = "grant")]
     Grant,
-    /// The human's words refused an effect.
+    /// Historical claim recorded as a denial.
     #[serde(rename = "denial")]
     Denial,
     /// Unknown variant for forward compatibility.
@@ -9471,10 +11178,10 @@ pub enum ExitPlanModeAction {
     Unknown,
 }
 
-/// Terminal status a factory run committed. A settled run is never `pending` or `running`, so those two members of the run-status domain are deliberately absent.
+/// Terminal status a workflow run committed. A settled run is never `pending` or `running`, so those two members of the run-status domain are deliberately absent.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FactoryRunSettledStatus {
-    /// The factory body resolved and its result was committed.
+pub enum WorkflowRunSettledStatus {
+    /// The workflow body resolved and its result was committed.
     #[serde(rename = "completed")]
     Completed,
     /// The run was stopped by a limit, an approval refusal or another policy decision.

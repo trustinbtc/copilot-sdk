@@ -63,6 +63,8 @@ public class CopilotClientOptions {
     private String gitHubToken;
     private String logLevel = "info";
     private CopilotClientMode mode = CopilotClientMode.COPILOT_CLI;
+    private ExtensionLaunchProvider extensionLaunchProvider;
+    private InstallationConfirmationHandler installationConfirmationHandler;
     private Supplier<CompletableFuture<List<ModelInfo>>> onListModels;
     private CopilotRequestHandler requestHandler;
     private Function<GitHubTelemetryNotification, CompletableFuture<Void>> onGitHubTelemetry;
@@ -155,6 +157,64 @@ public class CopilotClientOptions {
             }
         }
         this.builtinPluginDirectories = new ArrayList<>(paths);
+        return this;
+    }
+
+    /**
+     * Gets the connection-level extension launch profile provider.
+     *
+     * @return the provider, or {@code null} if not set
+     */
+    @JsonIgnore
+    @CopilotExperimental
+    public ExtensionLaunchProvider getExtensionLaunchProvider() {
+        return extensionLaunchProvider;
+    }
+
+    /**
+     * Sets the connection-level extension launch profile provider.
+     * <p>
+     * When provided, the client registers the provider during startup before any
+     * session can be created.
+     *
+     * @param extensionLaunchProvider
+     *            the provider (must not be {@code null})
+     * @return this options instance for method chaining
+     */
+    @CopilotExperimental
+    public CopilotClientOptions setExtensionLaunchProvider(ExtensionLaunchProvider extensionLaunchProvider) {
+        this.extensionLaunchProvider = Objects.requireNonNull(extensionLaunchProvider,
+                "extensionLaunchProvider must not be null");
+        return this;
+    }
+
+    /**
+     * Gets the connection-level installation confirmation handler.
+     *
+     * @return the handler, or {@code null} if not set
+     */
+    @JsonIgnore
+    @CopilotExperimental
+    public InstallationConfirmationHandler getInstallationConfirmationHandler() {
+        return installationConfirmationHandler;
+    }
+
+    /**
+     * Sets the connection-level installation confirmation handler.
+     * <p>
+     * When provided, the client installs the {@code installations.confirm}
+     * reverse-RPC handler. This does not enable installation capabilities or call a
+     * runtime registration RPC.
+     *
+     * @param installationConfirmationHandler
+     *            the handler (must not be {@code null})
+     * @return this options instance for method chaining
+     */
+    @CopilotExperimental
+    public CopilotClientOptions setInstallationConfirmationHandler(
+            InstallationConfirmationHandler installationConfirmationHandler) {
+        this.installationConfirmationHandler = Objects.requireNonNull(installationConfirmationHandler,
+                "installationConfirmationHandler must not be null");
         return this;
     }
 
@@ -866,6 +926,8 @@ public class CopilotClientOptions {
         copy.cwd = this.cwd;
         copy.environment = this.environment != null ? new java.util.HashMap<>(this.environment) : null;
         copy.executor = this.executor;
+        copy.extensionLaunchProvider = this.extensionLaunchProvider;
+        copy.installationConfirmationHandler = this.installationConfirmationHandler;
         copy.gitHubToken = this.gitHubToken;
         copy.logLevel = this.logLevel;
         copy.onListModels = this.onListModels;

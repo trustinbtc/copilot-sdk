@@ -14,10 +14,9 @@ verified `github/copilot-cli` release assets when the SDK is published, so
 starting the SDK performs no runtime download. Set `COPILOT_CLI_PATH` to use an
 existing installation instead.
 
-The checked-in release pin is `copilotCliVersion` in `package.json`. Run
-`npm run set:cli-version -- <version>` to update it and regenerate the compiled
-metadata in `src/cliVersion.ts`. Packaging verifies release assets against the
-release's `SHA256SUMS.txt`.
+The checked-in `copilotCliVersion` in `package.json` and compiled metadata in
+`src/cliVersion.ts` use a development placeholder. The public SDK snapshot
+replaces both with the CLI version published for that snapshot.
 
 `npm run pack:release` builds the main package and all platform packages. Set
 `COPILOT_CLI_DOWNLOAD_BASE_URL` to use a release mirror while packaging.
@@ -26,11 +25,150 @@ containing validated runtime npm package roots named for all eight platforms.
 This keeps `COPILOT_CLI_USE_NPM_PACKAGE` false and embeds those runtime files in
 the self-contained SDK platform packages.
 
+In the runtime repository, packaging uses the prepared same-checkout runtime.
+Set `COPILOT_SDK_RUNTIME_PLATFORMS` to the available target (for example,
+`linux-x64`) for both `pack:release` and `verify:release-packages`. SDK CI checks
+that target only; public release workflows leave this unset to package and
+verify all eight platforms.
+
 ## Installation
 
 ```bash
 npm install @github/copilot-sdk
 ```
+
+## Runtime-supervised AHP host (experimental)
+
+`startAhpHost()` exposes copilotd's complete Agent Host Protocol server through the
+same runtime used by the SDK:
+
+```typescript
+import { CopilotClient } from "@github/copilot-sdk";
+
+await using client = new CopilotClient();
+await client.start();
+const host = await client.startAhpHost({
+    localServer: {},
+    onExit: (exit) => {
+        if (exit.error) console.error(exit.error);
+    },
+});
+
+// Connect an AHP client using host.url and host.token.
+// Treat host.token as a secret; do not log it.
+
+// Existing SDK sessions and AHP sessions share this runtime.
+// Keep client alive while the listener is needed. Leaving this scope disposes
+// client, and the runtime stops its listener without a separate host.dispose().
+```
+
+The runtime hosts the complete AHP server in-process; the SDK does not launch a
+second runtime or relay the host's traffic. The host has its own SDK connection
+and belongs to the client connection that started it. Explicit disposal,
+connection loss, and runtime shutdown stop the listener and its hosting task
+without deleting underlying sessions. Reconnecting does not reclaim a host.
+The optional `onExit` callback reports exits at most once. If the owner connection
+is lost, it reports that loss rather than claiming that listener cleanup was
+acknowledged.
+
+`host.pid` is absent for in-process listeners. The optional field is retained
+for separate host process IDs returned by legacy runtimes, never the runtime PID.
+Use `dispose()` to stop the listener. `reason: "exited"` reports hosting-task
+failure, not runtime process death, and `exitCode` is absent. Hosting no longer
+provides process isolation from the runtime.
+
+Select at least one transport explicitly: `localServer: {}` enables the local
+listener, `githubEnvironment: { name: "My app", computeId: "stable-installation-id" }`
+registers a Mission Control environment and enables remote WPS connections, and
+both enables both transports. GitHub-only hosting opens no local listener;
+`host.url` and `host.token` are undefined, while `host.environmentId` identifies
+the environment. The application supplies a stable compute ID and configures
+transports only at startup. Dispose and recreate the host to change them.
+
+The runtime validates options inside `localServer` and applies their defaults:
+
+- `hostname` defaults to `127.0.0.1`. Set it explicitly to request a non-loopback
+  listener, such as `hostname: "0.0.0.0"`, and restrict network access appropriately.
+- `port` defaults to `0`, which selects an available port.
+- `requireConnectionToken` defaults to `true`. The runtime generates a random
+  token unless you supply a nonempty `token`.
+- Set `requireConnectionToken: false` to disable token authentication;
+  `host.token` is then undefined. A supplied `token` cannot be combined with
+  `requireConnectionToken: false`.
+
+The listener follows the owning client's lifetime. Call `await host.dispose()`
+only when you want to stop it earlier; `await using host` also supports a shorter
+scope. Each disposal call forwards to the runtime, which owns idempotent cleanup.
+The AHP transport remains owned by the host.
+
+### Application-owned sessions
+
+Supply `createSession` to materialize fresh AHP sessions in your application:
+
+```typescript
+import { approveAll, CopilotClient, defineTool } from "@github/copilot-sdk";
+
+await using client = new CopilotClient();
+await using host = await client.startAhpHost({
+    localServer: {},
+    createSession: ({ config, signal }) => {
+        signal.throwIfAborted();
+        return client.createSession({
+            ...config,
+            onPermissionRequest: approveAll,
+            systemMessage: { mode: "append", content: "Use the app's greeting tool." },
+            tools: [defineTool("greeting", {
+                description: "Get the application's greeting",
+                parameters: { type: "object", properties: {} },
+                handler: () => "Hello from the application!",
+            })],
+        });
+    },
+    onSessionReleased: async (originalSession) => {
+        // Optional: the app decides whether to disconnect, keep, or destroy it.
+        await originalSession.disconnect();
+    },
+});
+```
+
+Preserve the supplied `config`, including its fresh session identity, workspace,
+and selected host settings. Add your prompt and tools where the host has not
+explicitly selected those settings; conflicting settings fail rather than
+silently advertising configuration that was not applied. Return a normal session
+created by this same client. The creation factory does not adopt an arbitrary existing
+session or expose unrelated application sessions in the AHP catalog.
+
+Only the session ID returns through ordinary SDK RPC. The host attaches to **that same
+resident session**, adding its own callback/tool registrations without replacing
+the application's prompt, tool filters, hooks, or tools. Application tool functions
+continue running in the app while their results stream through the existing AHP
+projector. No second application connection or function serialization is involved.
+
+The SDK retains the original returned object until participation ends and invokes
+`onSessionReleased` at most once per handoff, including attach failure, hosting-task exit,
+and owner disconnection. The SDK never automatically disconnects or destroys the
+app object. The creation callback receives an abort signal; materialization
+is bounded to 30 seconds and cancellation also releases objects returned late.
+Graceful host disposal waits for AHP detach before reporting release. Omitting
+`createSession` preserves copilotd-owned creation.
+
+To restore durable application-owned sessions, also supply `resumeSession`.
+It receives `{ sessionId, config, signal }` (`AhpSessionResumeRequest`).
+Return the object from this client's `resumeSession(sessionId, { ...config,
+onPermissionRequest, ... })`, restoring your tools, hooks, and handlers.
+Alternatively, return a retained original session from this client when it
+still matches the requested identity and workspace.
+Only catalog entries marked as application-owned invoke this callback.
+If the callback is missing, restoring such an entry fails instead of falling
+back to host-owned creation.
+Published resident sessions attach directly, without invoking it or replacing
+their current registrations. Resumed sessions follow the same original-object
+retention, cancellation, late-result release, and `onSessionReleased` rules.
+
+The `copilotd-hosting` library runs inside the runtime provider.
+Development integrations require a
+source-built launcher and provider (`COPILOT_RUNTIME_PROVIDER_LIB`). Older
+runtimes without these RPC operations cannot start a host.
 
 ## Run the Sample
 
@@ -118,6 +256,8 @@ new CopilotClient(options?: CopilotClientOptions)
 - `mode?: "empty" | "copilot-cli"` - Defaulting strategy. Use `"empty"` for multi-user server mode; defaults to `"copilot-cli"`.
 - `workingDirectory?: string` - Working directory for the runtime process (default: current process cwd).
 - `baseDirectory?: string` - Base directory for Copilot data (session state, config, etc.). Sets `COPILOT_HOME` on the spawned runtime. When not set, the runtime defaults to `~/.copilot`. Ignored when connecting via `RuntimeConnection.forUri`.
+- `extensionLaunchProvider?: ExtensionLaunchProvider` - Experimental connection-level resolver for extension launch profiles. The client installs the reverse-RPC handler and registers the provider during startup before sessions can be created.
+- `installationConfirmationHandler?: InstallationConfirmationHandler` - Experimental connection-global human review for `installations.confirm`. Receives the typed request and independent request/connection cancellation signals, and returns an explicit decision. Does not enable installation capabilities.
 - `logLevel?: "none" | "error" | "warning" | "info" | "debug" | "all"` - Log level. When omitted, the runtime uses its own default (currently `"info"`).
 - `env?: Record<string, string | undefined>` - Environment variables for the runtime process. When omitted, inherits `process.env`.
 - `gitHubToken?: string` - GitHub token for authentication. When provided, takes priority over other auth methods.
@@ -129,6 +269,49 @@ new CopilotClient(options?: CopilotClientOptions)
 - `sessionIdleTimeoutSeconds?: number` - Server-wide idle timeout for sessions in seconds. Ignored when connecting via `RuntimeConnection.forUri`.
 - `enableRemoteSessions?: boolean` - Enable Mission Control remote session support. Ignored when connecting via `RuntimeConnection.forUri`.
 
+#### Installation confirmation (experimental)
+
+All six SDKs (Node.js, Python, Go, .NET, Java and Rust) provide this receiver with the
+same semantics: each review gets one cancellation token, concurrent reviews are
+independent, and a decision returned after cancellation is never sent. Without a
+configured handler, an `installations.confirm` request is refused, which the
+runtime treats as no consent.
+
+The installation confirmation handler receives the generated
+`InstallationConfirmationRequest` and a `CancellationToken`. Match `operationId`
+and `policySessionId` against the exact original action on this connection
+before presenting the complete review. Refuse unknown operations or incomplete
+reviews; missing legacy session metadata is not permission to use the current
+session. Return `"confirm"`, `"decline"` or `"cancel"` only after an explicit
+human decision. The SDK echoes the original challenge and fingerprint.
+
+Concurrent reviews remain independent. The token is cancelled when the runtime
+retires the request, including runtime-enforced expiry, or when the original
+connection closes. Observe it to close pending UI. Late handler results cannot
+approve a retired request. This incoming signal does not cancel outbound
+installation or OAuth RPCs, and dropping those promises is not cancellation.
+
+Use `client.rpc.mcp.prepareInstall` before `applyInstall`: preparation returns an
+inert runtime-issued `operationId` and original expiry. Register that ID with its
+captured session on this exact client before applying. Removal uses
+`planUninstall` then `applyUninstall`; the returned `operationId` identifies the
+operation, while `planHandle` is the one-use removal input. Never interchange them.
+Use `client.rpc.mcp.installations.list` and `recover` for owned inventory.
+Inspect or cancel uncertain work through `status` and `cancel` on the original
+connection and operation ID, without selecting a replacement session or replaying apply.
+
+Owned OAuth similarly uses `session.rpc.mcp.oauth.prepareLogin` to obtain
+`loginId` before browser, network or cached-reconnect work. Retain that ID with
+the original session and `expectedInstallationId` for `login` and `cancelLogin`.
+Prepare freezes reauthentication and display options. Cancelling an incoming
+confirmation or abandoning a login promise is not a substitute for `cancelLogin`.
+Manual MCP OAuth retains its direct `login` path.
+
+A matching runtime contract and available owned-lifecycle support are required.
+Capability negotiation does not promise availability; preserve typed refusals
+instead of falling back to raw configuration writes. Generated presence and
+transport tests do not establish a working installer, live OAuth or restart safety.
+
 #### Methods
 
 ##### `start(): Promise<void>`
@@ -138,6 +321,9 @@ Start the CLI server and establish connection.
 ##### `stop(): Promise<Error[]>`
 
 Stop the server and close all sessions. Returns a list of any errors encountered during cleanup.
+For an owned stdio runtime, closes stdin and waits up to 10 seconds for host cleanup
+(including telemetry export) and process exit before falling back to termination.
+This graceful-exit timeout is separate from the shutdown RPC and post-termination wait.
 
 ##### `forceStop(): Promise<void>`
 
@@ -157,6 +343,7 @@ Create a new conversation session.
 - `systemMessage?: SystemMessageConfig` - System message customization (see below)
 - `infiniteSessions?: InfiniteSessionConfig` - Configure automatic context compaction (see below)
 - `workingDirectory?: string` - Working directory for the session (default: runtime process cwd).
+- `refreshCustomInstructions?: boolean` - Invalidates the process-wide custom-instruction discovery cache before creating this session, so instruction-file edits made in the same runtime are read again. Defaults to `false` (cache reuse). Other sessions in this runtime may observe updated instructions on later turns or discovery. This does not watch files or enable disabled instruction loading. Available on `SessionConfig`, not `ResumeSessionConfig`.
 - `enableSessionStore?: boolean` - Enables the cross-session store for search and retrieval across sessions. When unset in `"copilot-cli"` mode, the runtime default applies (enabled). In `"empty"` mode, defaults to disabled.
 - `gitHubTokenProvider?: GitHubTokenProvider` - Acquires rotating, session-scoped GitHub tokens. Token results require a positive `expiresIn` value in seconds remaining when the callback completes; production tokens typically last eight hours. Cannot be combined with `gitHubToken`.
 - `provider?: ProviderConfig` - Custom API provider configuration (BYOK - Bring Your Own Key). See [Custom Providers](#custom-providers) section.
@@ -294,6 +481,7 @@ Source is independent of delivery mode. Leaving it unset preserves the existing 
 ##### `sendAndWait(options: MessageOptions, timeout?: number): Promise<AssistantMessageEvent | undefined>`
 
 Send a message and wait until the session becomes idle.
+Sub-agent events are still delivered to listeners, but do not complete the wait or supply its reply.
 
 **Options:**
 
@@ -304,6 +492,87 @@ Send a message and wait until the session becomes idle.
 - `timeout?: number` - Optional timeout in milliseconds
 
 Returns the final assistant message event, or undefined if none was received.
+
+##### Structured output (preview)
+
+Requires a runtime build with `responseFormat` and `originatingMessageId` support.
+Pass a raw JSON Schema or a Zod schema as `responseSchema` to `send` or
+`sendAndWait`. As with custom tool parameters, the SDK converts Zod schemas to
+JSON Schema before sending them:
+
+```typescript
+import { z } from "zod";
+
+const answerSchema = z.object({ answer: z.number().int() });
+const message = await session.sendAndWait({
+    prompt: "What is 19 + 23?",
+    responseSchema: answerSchema,
+});
+console.log(message?.data.content); // JSON text
+```
+
+For a typed result, pass the Zod schema as the **second argument** instead:
+
+```typescript
+const answer = await session.sendAndWait("What is 19 + 23?", answerSchema);
+console.log(answer.answer); // number; TResult is inferred from answerSchema
+```
+
+`sendAndWait<TResult>(options, schema, timeout?)` generates the JSON Schema from
+the schema value, parses the final JSON, and validates it with the schema's
+`parse` method. TypeScript cannot derive a runtime schema from an erased type
+parameter alone. Invalid JSON, a schema mismatch, or a completed run without a
+matching assistant message throws. Do not also set `options.responseSchema` when
+using the typed overload.
+
+The schema belongs to the submitted run, including its tool-call iterations.
+Internally generated stop-hook corrections retain the schema and originating
+message ID, so the wait returns the corrected answer. Independent subsequent
+sends do not inherit it. Ordinary immediate steering inherits the active schema
+and originating message ID, even when it arrives too late for the current model
+request and is promoted into a follow-up run. Specifying a schema with
+`mode: "immediate"` is rejected, even while idle.
+The generated `session.rpc.send` and `session.rpc.sendMessages` wrappers expose
+the full `responseFormat` contract when you need to set its name, description,
+or strict option rather than using the convenience defaults (`name: "response"`,
+`strict: true`).
+Each batch starts one run: the final returned message ID is its origin, preceding
+messages are context, and an empty batch has no origin. An immediate batch
+steers the active run instead and retains its origin.
+The schema is not a persisted session default: autonomous resume-pending work
+after a restart does not restore it. A terminal tool that clears context ends
+the old run; its fresh seed does not inherit the schema or origin. Such a run
+can finish without a structured result, in which case the typed wait throws.
+After a successful terminal tool, the runtime disables tools while the model
+produces the structured result. Stop-hook corrections remain supported.
+Remote sessions and known HydraFusion routes reject response formats before
+admission. Schemas larger than 32 MiB when JSON-encoded are also rejected before
+admission, using the runtime's existing request-size ceiling. This does not
+guarantee the schema plus conversation and tools fits the provider's budget.
+
+Structured waits select the last root-agent message whose `originatingMessageId`
+matches the ID returned by their send, then return at a non-autopilot
+`session.idle`. Other queued work can delay that idle, but cannot replace the
+selected result. The existing unformatted overload retains its session-wide
+behavior. `turnId` identifies an individual model/tool iteration, not the whole
+run; telemetry interaction IDs are not unique run identifiers.
+
+For event-driven consumption with `send`, subscribe before sending and collect
+root `assistant.message` events whose `data.originatingMessageId` matches the ID
+returned by `send`; events may arrive before that acknowledgement. Wait for
+`session.idle`, then parse the last matching message without tool requests.
+An earlier response may be superseded by a stop-hook correction. Handle
+`session.error` and aborted idle events rather than returning a partial result.
+
+Streaming still delivers ordinary text events, including intermediate messages
+and tool calls. Only the final selected message is parsed by the typed overload;
+not every event is necessarily a complete schema-conforming JSON document.
+Provider errors, refusals, cancellation, truncation, session errors, and timeouts
+can prevent a typed result. A timeout stops waiting, not the runtime's work.
+Use a model and endpoint that support native structured output. An API-compatible
+gateway may ignore format fields even when it accepts the request; for example,
+the Claude Chat-completions compatibility route is not equivalent to Anthropic's
+native `output_config.format` endpoint.
 
 ##### `on(eventType: string, handler: TypedSessionEventHandler): () => void`
 

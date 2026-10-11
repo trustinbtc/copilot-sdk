@@ -58,6 +58,7 @@ import {
     type RpcMethod,
     type SessionEventEnvelopeProperty,
 } from "./utils.js";
+import { validateLegacyRequests, validateLegacyDefinitions } from "./legacy-parameters.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -409,8 +410,8 @@ async function formatGoFile(filePath: string): Promise<void> {
     try {
         await execFileAsync("go", ["fmt", filePath]);
         console.log(`  ✓ Formatted with go fmt`);
-    } catch {
-        // go fmt not available, skip
+    } catch (cause) {
+        throw new Error(`Failed to format ${filePath}. Go is required for SDK generation; install the version specified in go/go.mod and ensure go is on PATH.`, { cause });
     }
 }
 
@@ -489,6 +490,9 @@ function goParamsTypeName(method: RpcMethod): string {
     const fallback = goRequestFallbackName(method);
     if (method.rpcMethod.startsWith("session.") && method.params?.$ref) {
         return fallback;
+    }
+    if (method.params?.$ref) {
+        return toPascalCase(refTypeName(method.params.$ref, rpcDefinitions));
     }
     return getRpcSchemaTypeName(getMethodParamsSchema(method), fallback);
 }
@@ -580,10 +584,14 @@ function extractGoEventVariants(schema: JSONSchema7): GoEventVariant[] {
             const typeSchema = variant.properties!.type as JSONSchema7;
             const typeName = typeSchema?.const as string;
             if (!typeName) throw new Error("Variant must have type.const");
+            const payloadSchema = resolveGoUnionMember(
+                (variant.properties!.data as JSONSchema7) || {},
+                definitionCollections
+            );
             const dataSchema =
-                resolveObjectSchema(variant.properties!.data as JSONSchema7, definitionCollections) ??
-                resolveSchema(variant.properties!.data as JSONSchema7, definitionCollections) ??
-                ((variant.properties!.data as JSONSchema7) || {});
+                resolveObjectSchema(payloadSchema, definitionCollections) ??
+                resolveSchema(payloadSchema, definitionCollections) ??
+                payloadSchema;
             return {
                 typeName,
                 dataClassName: `${toPascalCase(typeName)}Data`,
@@ -3197,6 +3205,7 @@ export function generateGoSessionEventsCode(
     const dataStructs: string[] = [];
     for (const variant of variants) {
         const required = new Set(variant.dataSchema.required || []);
+        const rawUnionPayload = goNonNullUnionMembers(variant.dataSchema).length > 1;
         const lines: string[] = [];
 
         if (variant.dataDescription) {
@@ -3210,8 +3219,13 @@ export function generateGoSessionEventsCode(
         lines.push(`type ${variant.dataClassName} struct {`);
 
         const fields: GoStructField[] = [];
+        if (rawUnionPayload) {
+            lines.push(`\t// Raw preserves the complete union payload, including unrecognized variants.`);
+            lines.push(`\tRaw json.RawMessage \`json:"-"\``);
+        }
+        const properties = rawUnionPayload ? {} : (variant.dataSchema.properties || {});
 
-        for (const [propName, propSchema] of sortByGoFieldName(Object.entries(variant.dataSchema.properties || {}))) {
+        for (const [propName, propSchema] of sortByGoFieldName(Object.entries(properties))) {
             if (typeof propSchema !== "object") continue;
             const prop = propSchema as JSONSchema7;
             const isReq = required.has(propName);
@@ -3232,7 +3246,19 @@ export function generateGoSessionEventsCode(
         }
 
         lines.push(`}`);
-        pushGoStructUnmarshalJSON(lines, variant.dataClassName, fields, ctx);
+        if (rawUnionPayload) {
+            pushGoEncodingBlock([
+                `func (r ${variant.dataClassName}) MarshalJSON() ([]byte, error) {`,
+                `\treturn json.Marshal(r.Raw)`,
+                `}`,
+                ``,
+                `func (r *${variant.dataClassName}) UnmarshalJSON(data []byte) error {`,
+                `\treturn json.Unmarshal(data, &r.Raw)`,
+                `}`,
+            ], ctx);
+        } else {
+            pushGoStructUnmarshalJSON(lines, variant.dataClassName, fields, ctx);
+        }
         lines.push(``);
         const constName = "SessionEventType" + variant.typeName
             .split(/[._]/)
@@ -3828,6 +3854,15 @@ async function generateRpc(schemaPath?: string): Promise<void> {
     // Build a combined definition map, including shared API definitions plus
     // method-specific request/result wrapper types.
     rpcDefinitions = collectDefinitionCollections(schema as Record<string, unknown>);
+    // Added inputs are optional pointer fields of the same request struct, so keyed literals are unchanged.
+    validateLegacyRequests(
+        schema,
+        (node) => collectRpcMethods(node),
+        getMethodParamsSchema,
+        (method) => !!method.params && !!getNullableInner(method.params)
+    );
+    // Response structs gain optional pointer fields, so keyed literals are unchanged.
+    validateLegacyDefinitions(rpcDefinitions);
     const allDefinitions: Record<string, JSONSchema7> = {
         ...Object.fromEntries(
             Object.entries(rpcDefinitions.$defs ?? {}).filter(([, value]) => typeof value === "object" && value !== null)
@@ -4243,6 +4278,12 @@ function emitMethod(lines: string[], receiver: string, name: string, method: Rpc
         }
         lines.push(`\traw, err := ${clientRef}.Request(ctx, "${method.rpcMethod}", req)`);
     } else {
+        if (method.rpcMethod === "managedSettings.resolve") {
+            // A typed nil inside Request's any argument marshals as null, not omitted params.
+            lines.push(`\tif ${paramsRef} == nil {`);
+            lines.push(`\t\t${paramsRef} = &${paramsType}{}`);
+            lines.push(`\t}`);
+        }
         const arg = hasParams ? paramsRef : "nil";
         lines.push(`\traw, err := ${clientRef}.Request(ctx, "${method.rpcMethod}", ${arg})`);
     }
@@ -4397,7 +4438,7 @@ export function emitClientSessionApiRegistration(lines: string[], clientSchema: 
     lines.push(``);
 }
 
-function emitClientGlobalApiRegistration(lines: string[], clientSchema: Record<string, unknown>, resolveType: (name: string) => string, unionInfos: Map<string, GoDiscriminatedUnionInfo>): void {
+export function emitClientGlobalApiRegistration(lines: string[], clientSchema: Record<string, unknown>, resolveType: (name: string) => string, unionInfos: Map<string, GoDiscriminatedUnionInfo>): void {
     const groups = collectClientGroups(clientSchema);
 
     for (const { groupName, groupNode, methods } of groups) {

@@ -8,6 +8,7 @@
 package com.github.copilot.generated.rpc;
 
 import com.github.copilot.CopilotExperimental;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import javax.annotation.processing.Generated;
 
@@ -35,6 +36,30 @@ public final class ServerCatalogApi {
     @CopilotExperimental
     public CompletableFuture<CatalogSearchResult> search(CatalogSearchParams params) {
         return caller.invoke("catalog.search", params, CatalogSearchResult.class);
+    }
+
+    /**
+     * A bounded catalog search. Both the query length and the result count are capped by the schema so a caller cannot request an unbounded scan.
+     * <p>
+     * Accepts the extensible request, including inputs added after the params record.
+     *
+     * @apiNote This method is experimental and may change in a future version.
+     * @since 1.0.0
+     */
+    @CopilotExperimental
+    public CompletableFuture<CatalogSearchResult> search(CatalogSearchRequest request) {
+        return caller.invoke("catalog.search", Objects.requireNonNull(request, "request"), CatalogSearchResult.class);
+    }
+
+    /**
+     * Terminates one retained catalog selection group through an opaque reference previously returned by the model-safe search projection.
+     *
+     * @apiNote This method is experimental and may change in a future version.
+     * @since 1.0.0
+     */
+    @CopilotExperimental
+    public CompletableFuture<CatalogSelectionResult> select(CatalogSelectParams params) {
+        return caller.invoke("catalog.select", params, CatalogSelectionResult.class);
     }
 
 }

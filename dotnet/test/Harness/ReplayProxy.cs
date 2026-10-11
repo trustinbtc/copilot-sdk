@@ -139,10 +139,17 @@ public sealed partial class ReplayProxy : IAsyncDisposable
             catch { /* Best effort */ }
         }
 
-        if (_process is { HasExited: false })
+        try
         {
-            try { _process.Kill(entireProcessTree: true); await _process.WaitForExitAsync(); }
-            catch { /* Ignore */ }
+            if (_process is { HasExited: false })
+            {
+                try { _process.Kill(entireProcessTree: true); await _process.WaitForExitAsync(); }
+                catch { /* Ignore */ }
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // Process.Start failed before this object was associated with a child.
         }
 
         _process?.Dispose();
@@ -150,19 +157,19 @@ public sealed partial class ReplayProxy : IAsyncDisposable
         _startupTask = null;
     }
 
-    public async Task ConfigureAsync(string filePath, string workDir, string backend)
+    public async Task ConfigureAsync(string filePath, string workDir, string backend, bool replayOnly = false)
     {
         var url = await (_startupTask ?? throw new InvalidOperationException("Proxy not started"));
 
         using var client = new HttpClient();
         var response = await client.PostAsJsonAsync(
             $"{url}/config",
-            new ConfigureRequest(filePath, workDir, backend),
+            new ConfigureRequest(filePath, workDir, backend, replayOnly),
             ReplayProxyJsonContext.Default.ConfigureRequest);
         response.EnsureSuccessStatusCode();
     }
 
-    private record ConfigureRequest(string FilePath, string WorkDir, string Backend);
+    private record ConfigureRequest(string FilePath, string WorkDir, string Backend, bool ReplayOnly);
 
     private record ProxyStartupMetadata(string? ConnectProxyUrl, string? CaFilePath);
 
@@ -195,7 +202,7 @@ public sealed partial class ReplayProxy : IAsyncDisposable
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null)
         {
-            if (File.Exists(Path.Combine(dir.FullName, "justfile")))
+            if (File.Exists(Path.Combine(dir.FullName, "test", "harness", "package.json")))
                 return dir.FullName;
             dir = dir.Parent;
         }
@@ -222,7 +229,9 @@ public record CopilotUserConfig(
     string AnalyticsTrackingId,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     [property: JsonPropertyName("quota_snapshots")]
-    IReadOnlyDictionary<string, CopilotUserQuotaSnapshot>? QuotaSnapshots = null);
+    IReadOnlyDictionary<string, CopilotUserQuotaSnapshot>? QuotaSnapshots = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    long? Id = null);
 
 public record CopilotUserEndpoints(string Api, string Telemetry);
 
@@ -250,7 +259,9 @@ public record ParsedHttpExchange(
 public record ChatCompletionRequest(
     string Model,
     List<ChatCompletionMessage> Messages,
-    List<ChatCompletionTool>? Tools);
+    List<ChatCompletionTool>? Tools,
+    [property: JsonPropertyName("tool_choice")] JsonElement? ToolChoice = null,
+    [property: JsonPropertyName("response_format")] JsonElement? ResponseFormat = null);
 
 public record ChatCompletionMessage(
     string Role,

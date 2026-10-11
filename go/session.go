@@ -441,6 +441,15 @@ func (s *Session) Send(ctx context.Context, options MessageOptions) (string, err
 		Tracestate:     tracestate,
 		RequestHeaders: options.RequestHeaders,
 	}
+	if options.ResponseSchema != nil {
+		strict := true
+		req.ResponseFormat = &rpc.ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: rpc.JSONSchemaResponseFormat{
+				Name: "response", Schema: options.ResponseSchema, Strict: &strict,
+			},
+		}
+	}
 
 	result, err := s.client.Request(ctx, "session.send", req)
 	if err != nil {
@@ -469,6 +478,10 @@ func (s *Session) SendPrompt(ctx context.Context, prompt string) (string, error)
 // has finished processing the message.
 //
 // Events are still delivered to handlers registered via [Session.On] while waiting.
+// Synchronous handlers registered before this call finish processing the completing
+// root session.idle event before it returns successfully.
+// This does not wait for asynchronous work started by a handler.
+// Sub-agent events with a non-empty AgentID do not complete the wait or supply its reply.
 //
 // Parameters:
 //   - options: The message options including the prompt and optional attachments.
@@ -492,6 +505,9 @@ func (s *Session) SendPrompt(ctx context.Context, prompt string) (string, error)
 //	    }
 //	}
 func (s *Session) SendAndWait(ctx context.Context, options MessageOptions) (*SessionEvent, error) {
+	if options.ResponseSchema != nil {
+		return s.sendAndWaitStructured(ctx, options)
+	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
@@ -504,6 +520,9 @@ func (s *Session) SendAndWait(ctx context.Context, options MessageOptions) (*Ses
 	var mu sync.Mutex
 
 	unsubscribe := s.On(func(event SessionEvent) {
+		if event.AgentID != nil && *event.AgentID != "" {
+			return
+		}
 		switch d := event.Data.(type) {
 		case *AssistantMessageData:
 			mu.Lock()
@@ -1506,6 +1525,7 @@ func (s *Session) handleBroadcastEvent(event SessionEvent) {
 				ClientSecret: d.StaticClientConfig.ClientSecret,
 				GrantType:    grantType,
 				PublicClient: d.StaticClientConfig.PublicClient,
+				Scope:        d.StaticClientConfig.Scope,
 			}
 		}
 		request := MCPAuthRequest{

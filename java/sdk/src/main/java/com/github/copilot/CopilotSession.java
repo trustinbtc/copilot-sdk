@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -165,6 +166,7 @@ public final class CopilotSession implements AutoCloseable {
 
     private static final Logger LOG = Logger.getLogger(CopilotSession.class.getName());
     private static final ObjectMapper MAPPER = JsonRpcClient.getObjectMapper();
+    private final java.util.Set<CompletableFuture<?>> structuredWaits = ConcurrentHashMap.newKeySet();
 
     /**
      * Fixed name of the runtime's built-in tool-search tool. A client can replace
@@ -187,7 +189,7 @@ public final class CopilotSession implements AutoCloseable {
     private final SessionUiApi ui;
     private final JsonRpcClient rpc;
     private volatile SessionRpc sessionRpc;
-    private final Set<Consumer<SessionEvent>> eventHandlers = ConcurrentHashMap.newKeySet();
+    private final Set<Consumer<SessionEvent>> eventHandlers = new CopyOnWriteArraySet<>();
     private final Map<String, ToolDefinition> toolHandlers = new ConcurrentHashMap<>();
     private final Map<String, PendingExternalTool> pendingExternalTools = new ConcurrentHashMap<>();
     private boolean externalToolsClosed;
@@ -565,6 +567,10 @@ public final class CopilotSession implements AutoCloseable {
         request.setAgentMode(options.getAgentMode());
         request.setRequestHeaders(options.getRequestHeaders());
         request.setDisplayPrompt(options.getDisplayPrompt());
+        if (options.getResponseSchema() != null) {
+            request.setResponseFormat(Map.of("type", "json_schema", "jsonSchema",
+                    Map.of("name", "response", "strict", true, "schema", options.getResponseSchema())));
+        }
 
         return rpc.invoke("session.send", request, SendMessageResponse.class).thenApply(SendMessageResponse::messageId);
     }
@@ -581,6 +587,11 @@ public final class CopilotSession implements AutoCloseable {
      * the future completes with {@link java.util.concurrent.CancellationException}.
      * If the timeout expires first, the future completes exceptionally with a
      * {@link TimeoutException}.
+     * <p>
+     * Sub-agent events with a non-empty agentId remain visible to subscribers but
+     * cannot complete this wait or supply its reply. Synchronous listeners
+     * registered before this call finish processing the root idle event before this
+     * wait completes.
      *
      * @param options
      *            the message options containing the prompt and attachments
@@ -597,12 +608,17 @@ public final class CopilotSession implements AutoCloseable {
      */
     public CompletableFuture<AssistantMessageEvent> sendAndWait(MessageOptions options, long timeoutMs) {
         ensureNotTerminated();
+        if (options.getResponseSchema() != null) {
+            return sendAndWaitStructured(options, timeoutMs);
+        }
         long totalNanos = System.nanoTime();
         var future = new CompletableFuture<AssistantMessageEvent>();
         var lastAssistantMessage = new AtomicReference<AssistantMessageEvent>();
         var firstAssistantMessageLogged = new java.util.concurrent.atomic.AtomicBoolean(false);
 
         Consumer<SessionEvent> handler = evt -> {
+            if (evt.getAgentId() != null && !evt.getAgentId().isEmpty())
+                return;
             if (evt instanceof AssistantMessageEvent msg) {
                 lastAssistantMessage.set(msg);
                 if (firstAssistantMessageLogged.compareAndSet(false, true)) {
@@ -659,15 +675,8 @@ public final class CopilotSession implements AutoCloseable {
             }
         }
 
-        // When inner future completes, run cleanup and propagate to result.
-        // Use whenCompleteAsync so that result.complete(r) is not called
-        // synchronously on the event-dispatch thread while dispatchEvent() is
-        // still iterating over handlers. Without async dispatch, a caller that
-        // registered its own session.on() listener before calling sendAndWait()
-        // could see its listener invoked *after* result.get() returned, because
-        // sendAndWait's internal handler would complete the future mid-loop. By
-        // submitting the completion to timeoutScheduler we allow the current
-        // dispatch loop to finish calling all other handlers first.
+        // Keep completion continuations off the event-dispatch thread. The ordered
+        // handler set, not this executor hop, ensures earlier listeners finish first.
         final ScheduledFuture<?> taskToCancel = timeoutTask;
         future.whenCompleteAsync((r, ex) -> {
             try {
@@ -730,12 +739,183 @@ public final class CopilotSession implements AutoCloseable {
     }
 
     /**
+     * Sends a prompt using the schema generated for a {@link CopilotResponse} type.
+     *
+     * @param <T>
+     *            the result type
+     * @param prompt
+     *            the prompt
+     * @param responseType
+     *            the annotated result class
+     * @return the deserialized, non-null final response
+     */
+    @CopilotExperimental
+    public <T> CompletableFuture<T> sendAndWait(String prompt, Class<T> responseType) {
+        return sendAndWait(new MessageOptions().setPrompt(prompt), responseType, 60000);
+    }
+
+    /**
+     * Sends a message using its result type's generated schema.
+     *
+     * @param <T>
+     *            the result type
+     * @param options
+     *            the message options, without an explicit schema or immediate
+     *            delivery
+     * @param responseType
+     *            the annotated result class
+     * @return the deserialized final response
+     */
+    @CopilotExperimental
+    public <T> CompletableFuture<T> sendAndWait(MessageOptions options, Class<T> responseType) {
+        return sendAndWait(options, responseType, 60000);
+    }
+
+    /**
+     * Infers a schema using the custom-tool annotation processor, then deserializes
+     * the last correlated root message without tool requests at non-autopilot idle.
+     * Provider schema restrictions apply. Jackson deserialization is not full JSON
+     * Schema validation. Cancellation stops waiting without aborting agent work.
+     *
+     * @param <T>
+     *            the result type
+     * @param options
+     *            the message options; not mutated
+     * @param responseType
+     *            the annotated result class
+     * @param timeoutMs
+     *            the wait timeout, or nonpositive for no timeout
+     * @return the non-null deserialized response
+     */
+    @CopilotExperimental
+    public <T> CompletableFuture<T> sendAndWait(MessageOptions options, Class<T> responseType, long timeoutMs) {
+        ensureNotTerminated();
+        if (options.getResponseSchema() != null || "immediate".equals(options.getMode())) {
+            throw new IllegalArgumentException("Typed output cannot specify a response schema or immediate delivery");
+        }
+        var message = options.clone().setResponseSchema(ResponseSchemas.forType(responseType));
+        var waiting = sendAndWaitStructured(message, timeoutMs);
+        CompletableFuture<T> result = waiting.thenApply(event -> {
+            try {
+                T value = MAPPER.readerFor(responseType)
+                        .with(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                        .readValue(event.getData().content());
+                if (value == null)
+                    throw new IllegalStateException("Structured response was JSON null, not a result");
+                return value;
+            } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                throw new java.util.concurrent.CompletionException(e);
+            }
+        });
+        result.whenComplete((value, error) -> {
+            if (result.isCancelled())
+                waiting.cancel(true);
+        });
+        return result;
+    }
+
+    private CompletableFuture<AssistantMessageEvent> sendAndWaitStructured(MessageOptions options, long timeoutMs) {
+        var result = new CompletableFuture<AssistantMessageEvent>();
+        class State {
+            String messageId;
+            boolean started;
+            AssistantMessageEvent last;
+            final List<SessionEvent> pending = new ArrayList<>();
+
+            synchronized void event(SessionEvent event) {
+                if (result.isDone() || (event.getAgentId() != null && !event.getAgentId().isEmpty()))
+                    return;
+                if (messageId == null) {
+                    pending.add(event);
+                    return;
+                }
+                if (event instanceof com.github.copilot.generated.UserMessageEvent user
+                        && messageId.equals(user.getData().messageId())) {
+                    started = true;
+                } else if (event instanceof AssistantMessageEvent assistant
+                        && messageId.equals(assistant.getData().originatingMessageId())) {
+                    started = true;
+                    last = assistant.getData().toolRequests() != null && !assistant.getData().toolRequests().isEmpty()
+                            ? null
+                            : assistant;
+                } else if (event instanceof SessionIdleEvent idle && started
+                        && idle.getData().mode() != SessionMode.AUTOPILOT) {
+                    if (Boolean.TRUE.equals(idle.getData().aborted())) {
+                        result.completeExceptionally(
+                                new IllegalStateException("Session aborted before structured output completed"));
+                    } else if (last == null || last.getData().content().isBlank()) {
+                        result.completeExceptionally(
+                                new IllegalStateException("Run completed without a structured assistant response"));
+                    } else {
+                        result.complete(last);
+                    }
+                } else if (event instanceof SessionErrorEvent error && started) {
+                    result.completeExceptionally(
+                            new IllegalStateException("Session error: " + error.getData().message()));
+                }
+            }
+        }
+        var state = new State();
+        Closeable subscription = on(event -> {
+            if (event instanceof AssistantMessageEvent || event instanceof SessionIdleEvent
+                    || event instanceof SessionErrorEvent
+                    || event instanceof com.github.copilot.generated.UserMessageEvent) {
+                state.event(event);
+            }
+        });
+        structuredWaits.add(result);
+        ScheduledFuture<?> timer;
+        try {
+            timer = timeoutMs > 0
+                    ? timeoutScheduler.schedule(
+                            () -> result.completeExceptionally(
+                                    new TimeoutException("Structured output timed out after " + timeoutMs + "ms")),
+                            timeoutMs, TimeUnit.MILLISECONDS)
+                    : null;
+        } catch (RejectedExecutionException e) {
+            result.completeExceptionally(e);
+            timer = null;
+        }
+        final ScheduledFuture<?> timeout = timer;
+        result.whenComplete((value, error) -> {
+            structuredWaits.remove(result);
+            if (timeout != null)
+                timeout.cancel(false);
+            try {
+                subscription.close();
+            } catch (IOException e) {
+                LOG.log(Level.SEVERE, "Error closing structured output subscription", e);
+            }
+        });
+        if (!result.isDone()) {
+            try {
+                send(options).whenComplete((id, error) -> {
+                    if (error != null) {
+                        result.completeExceptionally(error);
+                    } else {
+                        synchronized (state) {
+                            state.messageId = id;
+                            for (var event : state.pending)
+                                state.event(event);
+                            state.pending.clear();
+                        }
+                    }
+                });
+            } catch (IllegalStateException | IllegalArgumentException e) {
+                result.completeExceptionally(e);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Registers a callback for all session events.
      * <p>
      * The handler will be invoked for every event in this session, including
      * assistant messages, tool calls, and session state changes. For type-safe
      * handling of specific event types, prefer {@link #on(Class, Consumer)}
-     * instead.
+     * instead. A handler registered from an event handler does not receive the
+     * event currently being delivered.
      *
      * <p>
      * <b>Exception handling:</b> If a handler throws an exception, the error is
@@ -2192,7 +2372,7 @@ public final class CopilotSession implements AutoCloseable {
         ModelCapabilitiesOverrideSupports supports = null;
         if (modelCapabilities.getSupports() != null) {
             var s = modelCapabilities.getSupports();
-            supports = new ModelCapabilitiesOverrideSupports(s.getVision().orElse(null),
+            supports = new ModelCapabilitiesOverrideSupports(s.getVision().orElse(null), null,
                     s.getReasoningEffort().orElse(null), null);
         }
         ModelCapabilitiesOverrideLimits limits = null;
@@ -2527,6 +2707,8 @@ public final class CopilotSession implements AutoCloseable {
             isTerminated = true;
         }
 
+        structuredWaits.forEach(wait -> wait
+                .completeExceptionally(new IllegalStateException("Session closed before structured output completed")));
         cancelPendingExternalTools();
         timeoutScheduler.shutdownNow();
         releaseGitHubTokenProviderRegistration();

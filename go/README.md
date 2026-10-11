@@ -35,6 +35,18 @@ go run ./manual_tool_resume
 
 ## Quick Start
 
+For experimental in-process AHP hosting, use `client.StartAhpHost(ctx, &copilot.AhpHostOptions{...})`.
+Select at least one explicit transport: `LocalServer: &rpc.HostLocalServerOptions{}`
+enables a local listener; `GitHubEnvironment: &rpc.HostGitHubEnvironmentOptions{Name: "My host", ComputeID: "my-compute"}`
+registers a Mission Control environment. Both can be enabled. Import `rpc` from
+`github.com/github/copilot-sdk/go/rpc`. No transport is enabled by default.
+Local hostname, port, token, and authentication settings belong inside `LocalServer`.
+The returned handle's `URL`, `Token`, `PID`, and `EnvironmentID` are optional pointers;
+Mission Control-only hosting has no local URL. These APIs are experimental.
+Use the generated `client.RPC.Environments` namespace for environment list/get/delete operations.
+See [runtime-supervised AHP hosting](../docs/runtime-supervised-host.md) for creation
+and resume callbacks, resident-session publication, ownership, and shared-snapshot E2Es.
+
 ```go
 package main
 
@@ -96,6 +108,86 @@ tool name is `<server-key>-<tool-name>`. For `AvailableTools` and
 `ExcludedTools`, prefer the source-qualified form
 `mcp:<server-key>-<tool-name>`. For `CustomAgents[].Tools` and
 `DefaultAgent.ExcludedTools`, use `<server-key>-<tool-name>` directly.
+
+## JSON-RPC errors
+
+Use `errors.As` to inspect a runtime error without parsing its message, including
+errors wrapped by SDK operations:
+
+```go
+var rpcErr *copilot.RPCError
+if errors.As(err, &rpcErr) {
+    fmt.Printf("RPC error %d: %s\n", rpcErr.Code, rpcErr.Message)
+    if rpcErr.Data != nil {
+        // Decode into an application-specific type when the payload schema is known.
+        var details map[string]json.RawMessage
+        if err := json.Unmarshal(rpcErr.Data, &details); err != nil {
+            // The payload may be an array or scalar rather than an object.
+            log.Printf("Error data is not an object: %v", err)
+        }
+    }
+}
+```
+
+This example uses the standard `errors`, `encoding/json`, `fmt`, and `log` packages.
+`RPCError.Data` is a `json.RawMessage` containing the original JSON value:
+objects, arrays, strings, numbers, and booleans are preserved. Omitted `data`
+is `nil`; explicit JSON null is the non-nil JSON text `null`. Empty values,
+zero, and false are not treated as absent. Ordinary connection and local
+precondition failures do not match `*copilot.RPCError`. The transport also uses
+this type for locally synthesized inline-response callback failures, so matching
+it does not prove that the runtime sent an error response.
+
+`RPCError` aliases the existing transport error, so error identity, wrapping,
+and `Error()` messages are unchanged. The error string does not include the
+payload; accessing or logging it is an explicit application choice.
+Avoid logging it indiscriminately: server-provided data may contain sensitive
+information. Its fields and data bytes are shared with the wrapped error; copy
+them before mutation.
+
+## Installation confirmation (experimental)
+
+Set `ClientOptions.InstallationConfirmationHandler` to receive the runtime's
+`installations.confirm` callback through `InstallationConfirmationHandler`. The
+handler receives the generated `InstallationConfirmationRequest` and an
+`InstallationConfirmationContext`, a `context.Context` cancelled when the review
+is retired or the original connection closes. It returns only an explicit
+`InstallationConfirmationDecision`: `confirm`, `decline` or `cancel`. The SDK
+echoes the original challenge and review fingerprint; it never infers approval.
+
+Match `OperationID` and `PolicySessionID` against the original action on this
+exact connection before presenting the complete review. Missing legacy session
+metadata does not select a default session. Refuse unknown operations or
+incomplete reviews. Concurrent reviews are independent and do not block other
+RPCs on the connection.
+
+The callback context follows the runtime's numeric `$/cancelRequest`, including
+runtime-enforced expiry, and is also cancelled for loss of the original
+connection or client stop. Any separately spawned UI work must observe that
+single context. Dropping an outbound installation or OAuth future does not
+cancel that operation.
+
+Call `client.RPC.MCP.PrepareInstall(...)` before `ApplyInstall(...)`. Register
+its inert runtime-issued `OperationID`, original expiry and captured session on
+this client before applying. Removal uses `PlanUninstall(...)` then
+`ApplyUninstall(...)`; its `OperationID` identifies the operation, while
+`PlanHandle` is the one-use removal input. Never interchange them. The
+`Installations` namespace exposes `List`, `Recover`, `Status` and `Cancel`.
+Control uncertain work using its original connection and operation ID, without
+selecting a replacement session or replaying apply.
+
+Owned OAuth uses `session.RPC.MCP.Oauth().PrepareLogin(...)` to return `LoginID`
+before browser, network or cached-reconnect work. Keep that ID with the original
+session and `ExpectedInstallationID` for `Login(...)` and `CancelLogin(...)`.
+Preparation freezes reauthentication and display options. Dropping the login
+future is not a substitute for `CancelLogin(...)`. Manual MCP OAuth retains its
+direct `Login(...)` path.
+
+These methods require a matching runtime and available owned-lifecycle support.
+Capability negotiation does not promise availability; preserve typed refusals
+instead of falling back to raw configuration writes. Generated presence and
+transport tests do not establish live OAuth, activation or cross-process
+recovery.
 
 ## Distributing your application with an embedded GitHub Copilot CLI
 
@@ -164,7 +256,7 @@ Implemented with pure-Go FFI (via [purego](https://github.com/ebitengine/purego)
 
 - `NewClient(options *ClientOptions) *Client` - Create a new client
 - `Start(ctx context.Context) error` - Start the CLI server
-- `Stop() error` - Stop the CLI server
+- `Stop() error` - Gracefully stop the CLI server. For an owned stdio process, requests runtime shutdown, closes stdin, and waits up to 10 seconds for host cleanup (including telemetry) and natural exit before falling back to a forced termination.
 - `ForceStop()` - Forcefully stop without graceful cleanup
 - `CreateSession(ctx context.Context, config *SessionConfig) (*Session, error)` - Create a new session
 - `ResumeSession(ctx context.Context, sessionID string, config *ResumeSessionConfig) (*Session, error)` - Resume an existing session
@@ -209,6 +301,8 @@ Event types: `SessionLifecycleCreated`, `SessionLifecycleDeleted`, `SessionLifec
   `StdioConnection` and `TCPConnection` accept an optional connection-level `Env`. Set environment variables via **either** the client-level `Env` option or the connection's `Env`, not both (setting both panics); prefer the connection-level `Env`.
 - `WorkingDirectory` (string): Working directory for the runtime process (default: current process working directory)
 - `BaseDirectory` (string): Base directory for Copilot data (session state, config, etc.). Sets `COPILOT_HOME` on the spawned runtime. When empty, the runtime defaults to `~/.copilot`. Ignored with `URIConnection`. This does **not** affect where the Go SDK extracts the embedded CLI binary; use `embeddedcli.Config.Dir` for the extraction/cache location.
+- `ExtensionLaunchProvider` (ExtensionLaunchProvider): Experimental connection-level resolver for extension launch profiles. `Start` installs the reverse-RPC handler and registers the provider before sessions can be created.
+- `InstallationConfirmationHandler` (InstallationConfirmationHandler): Experimental connection-global human review for `installations.confirm`. Receives the typed request, a per-request cancellation context and a separate connection-closed signal, then returns an explicit decision. Does not enable installation capabilities.
 - `LogLevel` (string): Log level. When empty (default), the runtime uses its own default level (the SDK does not pass `--log-level`).
 - `Env` ([]string): Environment variables for the runtime process (default: inherits from current process)
 - `GitHubToken` (string): GitHub token for authentication. When provided, takes priority over other auth methods.
@@ -301,6 +395,8 @@ whitespace, change case, or remove an existing prefix.
 Source is independent of delivery `Mode` and `AgentMode`; it does not replace the
 session's `SystemMessage` configuration. `SendAndWait` accepts the same options
 and still waits for session idle, returning `nil` if no assistant message arrives.
+Sub-agent events remain visible to listeners but do not complete the wait or
+supply its reply.
 
 ### Helper Functions
 
@@ -528,6 +624,38 @@ lookupIssue := copilot.DefineTool("lookup_issue", "Fetch issue details",
     })
 lookupIssue.Defer = copilot.ToolDeferAuto
 ```
+
+## Structured output (experimental)
+
+Use the package-level generic helper (Go does not support generic methods):
+
+```go
+type Inventory struct {
+    Count int    `json:"count"`
+    Color string `json:"color"`
+}
+
+inventory, err := copilot.SendAndWait[Inventory](ctx, session, copilot.MessageOptions{
+    Prompt: "Call get_inventory, then report the widget count and color.",
+})
+```
+
+This derives the schema using the same `jsonschema-go` generator as `DefineTool`
+and unmarshals the final JSON into `Inventory`. Unmarshaling is not full JSON
+Schema validation. For an explicit schema, set `MessageOptions.ResponseSchema`
+on `session.Send` or `session.SendAndWait`; the latter returns the message event.
+The generic helper rejects an explicit schema or immediate delivery.
+
+The schema lasts for one run, including tools, steering, and stop-hook corrections.
+Independent sends and subagents do not inherit it; streaming stays text.
+Structured waits select the last correlated root assistant message without tool
+requests at non-autopilot idle. Concurrent waits retain their own results, though
+queued work can delay idle. Aborted runs, session errors after the run starts,
+and missing final output fail. Context cancellation stops waiting, not agent work.
+
+Provider schema restrictions apply, and supplied schemas are forwarded unchanged.
+Low-level `session.RPC.Send` and `session.RPC.SendMessages` expose the full
+`rpc.ResponseFormat` options, including name, description, and strictness.
 
 ## Streaming
 

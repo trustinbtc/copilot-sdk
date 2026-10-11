@@ -40,6 +40,7 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
+use self::http_response_reader::HttpResponseReader;
 use crate::generated::api_types::{
     LlmInferenceHttpRequestChunkRequest, LlmInferenceHttpRequestStartRequest,
     LlmInferenceHttpRequestStartTransport, LlmInferenceHttpResponseChunkError,
@@ -48,6 +49,8 @@ use crate::generated::api_types::{
 use crate::{
     Client, ClientInner, JsonRpcRequest, JsonRpcResponse, RequestId, SessionId, error_codes,
 };
+
+mod http_response_reader;
 
 const METHOD_HTTP_REQUEST_START: &str = "llmInference.httpRequestStart";
 const METHOD_HTTP_REQUEST_CHUNK: &str = "llmInference.httpRequestChunk";
@@ -157,6 +160,14 @@ pub struct CopilotRequestContext {
 }
 
 /// Streaming response body: a sequence of byte chunks or a terminal error.
+///
+/// HTTP bytes are forwarded in order, but chunk boundaries are not preserved.
+/// The SDK reads ahead while awaiting runtime acknowledgements, using at most
+/// 64 KiB of raw-byte forwarding buffers plus one current source chunk. This
+/// excludes storage inside the source stream and RPC serialization. A source
+/// chunk (including its shared backing allocation) is not size-limited by this API.
+/// Bytes available after an acknowledgement are flushed without waiting for
+/// more input. WebSocket message boundaries are preserved separately.
 pub type CopilotHttpResponseBody =
     Pin<Box<dyn Stream<Item = Result<Bytes, CopilotRequestError>> + Send>>;
 
@@ -479,13 +490,13 @@ impl CopilotWebSocketForwarderBuilder {
                     _ = loop_cancel.cancelled() => break,
                     msg = read.next() => match msg {
                         Some(Ok(Message::Text(text))) => {
-                            let message = CopilotWebSocketMessage::from_text(text);
+                            let message = CopilotWebSocketMessage { data: bytes::Bytes::from(text).into(), binary: false };
                             if let Some(out) = apply_transform(&on_response, message) {
                                 let _ = response.send_message(out).await;
                             }
                         }
                         Some(Ok(Message::Binary(data))) => {
-                            let message = CopilotWebSocketMessage { data, binary: true };
+                            let message = CopilotWebSocketMessage { data: data.into(), binary: true };
                             if let Some(out) = apply_transform(&on_response, message) {
                                 let _ = response.send_message(out).await;
                             }
@@ -542,13 +553,13 @@ impl CopilotWebSocketHandler for CopilotWebSocketForwarder {
             return Ok(());
         };
         let ws_message = if message.binary {
-            Message::Binary(message.data)
+            Message::Binary(message.data.into())
         } else {
             let text = match String::from_utf8(message.data) {
                 Ok(text) => text,
                 Err(err) => String::from_utf8_lossy(err.as_bytes()).into_owned(),
             };
-            Message::Text(text)
+            Message::Text(text.into())
         };
         let mut guard = self.write.lock().await;
         if let Some(write) = guard.as_mut() {
@@ -916,32 +927,57 @@ async fn stream_http_response(
     exchange: &CopilotRequestExchange,
     cancel: &CancellationToken,
 ) -> Result<(), CopilotRequestError> {
-    exchange
-        .start_response(response.status, response.status_text, response.headers)
-        .await?;
-
-    let mut body = response.body;
-    loop {
-        tokio::select! {
-            _ = cancel.cancelled() => {
-                return exchange
-                    .error_response("Request cancelled by runtime", Some("cancelled".to_string()))
-                    .await;
-            }
-            next = body.next() => match next {
-                Some(Ok(chunk)) => {
-                    for piece in chunk.chunks(32 * 1024) {
-                        exchange.write_binary(piece).await?;
-                    }
-                }
-                Some(Err(e)) => {
-                    return exchange.error_response(e.to_string(), None).await;
-                }
-                None => break,
-            }
+    tokio::select! {
+        biased;
+        // The RPC enqueues its complete frame before its first suspension.
+        // Poll it first even if already cancelled: the writer actor then commits
+        // the head before the terminal error, without waiting for the head ACK.
+        result = exchange.start_response(response.status, response.status_text, response.headers) => {
+            result?;
+        }
+        _ = cancel.cancelled() => {
+            drop(response.body);
+            return exchange
+                .error_response("Request cancelled by runtime", Some("cancelled".to_string()))
+                .await;
         }
     }
-    exchange.end_response().await
+
+    let forward = async {
+        let mut reader = HttpResponseReader::new(response.body);
+        let mut chunk = Vec::new();
+        loop {
+            match reader.next_chunk(&mut chunk).await {
+                Ok(true) => {}
+                Ok(false) => return exchange.end_response().await,
+                Err(error) => return exchange.error_response(error.to_string(), None).await,
+            }
+
+            // Keep the same acknowledged write alive while polling the upstream.
+            // Prefer its completion so a ready source cannot delay the next write.
+            let write = exchange.write_binary(&chunk);
+            tokio::pin!(write);
+            loop {
+                tokio::select! {
+                    biased;
+                    result = &mut write => {
+                        result?;
+                        break;
+                    }
+                    () = reader.read_more(), if reader.can_read() => {}
+                }
+            }
+        }
+    };
+    tokio::select! {
+        biased;
+        _ = cancel.cancelled() => {
+            exchange
+                .error_response("Request cancelled by runtime", Some("cancelled".to_string()))
+                .await
+        }
+        result = forward => result,
+    }
 }
 
 /// Forward runtime→upstream WebSocket messages until the runtime closes its side
@@ -1024,6 +1060,7 @@ pub(crate) struct CopilotRequestDispatcher {
 }
 
 impl CopilotRequestDispatcher {
+    #[cfg(any(feature = "runtime", test))]
     pub(crate) fn new(handler: Arc<dyn CopilotRequestHandler>) -> Self {
         Self {
             handler,
@@ -1032,6 +1069,7 @@ impl CopilotRequestDispatcher {
         }
     }
 
+    #[cfg(any(feature = "runtime", test))]
     pub(crate) fn set_client(&self, client: Weak<ClientInner>) {
         let _ = self.client.set(client);
     }

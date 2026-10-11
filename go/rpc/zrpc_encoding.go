@@ -235,6 +235,283 @@ func (r *AccountLogoutRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func unmarshalAuthEnumerateQuery(data []byte) (AuthEnumerateQuery, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind AuthEnumerateQueryKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case AuthEnumerateQueryKindAccounts:
+		var d AuthEnumerateQueryAccounts
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthEnumerateQueryKindProviders:
+		var d AuthEnumerateQueryProviders
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawAuthEnumerateQueryData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawAuthEnumerateQueryData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind AuthEnumerateQueryKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r AuthEnumerateQueryAccounts) MarshalJSON() ([]byte, error) {
+	type alias AuthEnumerateQueryAccounts
+	return json.Marshal(struct {
+		Kind AuthEnumerateQueryKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthEnumerateQueryProviders) MarshalJSON() ([]byte, error) {
+	type alias AuthEnumerateQueryProviders
+	return json.Marshal(struct {
+		Kind AuthEnumerateQueryKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *AccountsEnumerateRequest) UnmarshalJSON(data []byte) error {
+	type rawAccountsEnumerateRequest struct {
+		Query json.RawMessage `json:"query"`
+	}
+	var raw rawAccountsEnumerateRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Query != nil {
+		value, err := unmarshalAuthEnumerateQuery(raw.Query)
+		if err != nil {
+			return err
+		}
+		r.Query = value
+	}
+	return nil
+}
+
+func unmarshalAuthReadQuery(data []byte) (AuthReadQuery, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind AuthReadQueryKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case AuthReadQueryKindActiveAccount:
+		var d AuthReadQueryActiveAccount
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthReadQueryKindLastErrors:
+		var d AuthReadQueryLastErrors
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthReadQueryKindStatus:
+		var d AuthReadQueryStatus
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawAuthReadQueryData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawAuthReadQueryData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind AuthReadQueryKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r AuthReadQueryActiveAccount) MarshalJSON() ([]byte, error) {
+	type alias AuthReadQueryActiveAccount
+	return json.Marshal(struct {
+		Kind AuthReadQueryKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthReadQueryLastErrors) MarshalJSON() ([]byte, error) {
+	type alias AuthReadQueryLastErrors
+	return json.Marshal(struct {
+		Kind AuthReadQueryKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthReadQueryStatus) MarshalJSON() ([]byte, error) {
+	type alias AuthReadQueryStatus
+	return json.Marshal(struct {
+		Kind AuthReadQueryKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *AccountsGetRequest) UnmarshalJSON(data []byte) error {
+	type rawAccountsGetRequest struct {
+		Query json.RawMessage `json:"query"`
+	}
+	var raw rawAccountsGetRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Query != nil {
+		value, err := unmarshalAuthReadQuery(raw.Query)
+		if err != nil {
+			return err
+		}
+		r.Query = value
+	}
+	return nil
+}
+
+func unmarshalAuthWrite(data []byte) (AuthWrite, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind AuthWriteKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case AuthWriteKindLogout:
+		var d AuthWriteLogout
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthWriteKindSetCredentials:
+		var d AuthWriteSetCredentials
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthWriteKindSwitchActive:
+		var d AuthWriteSwitchActive
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawAuthWriteData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawAuthWriteData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind AuthWriteKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r AuthWriteLogout) MarshalJSON() ([]byte, error) {
+	type alias AuthWriteLogout
+	return json.Marshal(struct {
+		Kind AuthWriteKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthWriteSetCredentials) MarshalJSON() ([]byte, error) {
+	type alias AuthWriteSetCredentials
+	return json.Marshal(struct {
+		Kind AuthWriteKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthWriteSwitchActive) MarshalJSON() ([]byte, error) {
+	type alias AuthWriteSwitchActive
+	return json.Marshal(struct {
+		Kind AuthWriteKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *AccountsSetRequest) UnmarshalJSON(data []byte) error {
+	type rawAccountsSetRequest struct {
+		Command json.RawMessage `json:"command"`
+	}
+	var raw rawAccountsSetRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Command != nil {
+		value, err := unmarshalAuthWrite(raw.Command)
+		if err != nil {
+			return err
+		}
+		r.Command = value
+	}
+	return nil
+}
+
 func unmarshalAgentRegistrySpawnResult(data []byte) (AgentRegistrySpawnResult, error) {
 	if string(data) == "null" {
 		return nil, nil
@@ -616,6 +893,300 @@ func (r AttachmentSelection) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func unmarshalAuthEnumerateValue(data []byte) (AuthEnumerateValue, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind AuthEnumerateValueKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case AuthEnumerateValueKindAccounts:
+		var d AuthEnumerateValueAccounts
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthEnumerateValueKindProviders:
+		var d AuthEnumerateValueProviders
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawAuthEnumerateValueData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawAuthEnumerateValueData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind AuthEnumerateValueKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r AuthEnumerateValueAccounts) MarshalJSON() ([]byte, error) {
+	type alias AuthEnumerateValueAccounts
+	return json.Marshal(struct {
+		Kind AuthEnumerateValueKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthEnumerateValueProviders) MarshalJSON() ([]byte, error) {
+	type alias AuthEnumerateValueProviders
+	return json.Marshal(struct {
+		Kind AuthEnumerateValueKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalAuthLoginStep(data []byte) (AuthLoginStep, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind AuthLoginStepKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case AuthLoginStepKindAwaiting:
+		var d AuthLoginStepAwaiting
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthLoginStepKindCompleted:
+		var d AuthLoginStepCompleted
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthLoginStepKindError:
+		var d AuthLoginStepError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthLoginStepKindInputRequired:
+		var d AuthLoginStepInputRequired
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthLoginStepKindNeedsInteraction:
+		var d AuthLoginStepNeedsInteraction
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthLoginStepKindOpenURL:
+		var d AuthLoginStepOpenURL
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawAuthLoginStepData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawAuthLoginStepData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind AuthLoginStepKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r AuthLoginStepAwaiting) MarshalJSON() ([]byte, error) {
+	type alias AuthLoginStepAwaiting
+	return json.Marshal(struct {
+		Kind AuthLoginStepKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthLoginStepCompleted) MarshalJSON() ([]byte, error) {
+	type alias AuthLoginStepCompleted
+	return json.Marshal(struct {
+		Kind AuthLoginStepKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthLoginStepError) MarshalJSON() ([]byte, error) {
+	type alias AuthLoginStepError
+	return json.Marshal(struct {
+		Kind AuthLoginStepKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthLoginStepInputRequired) MarshalJSON() ([]byte, error) {
+	type alias AuthLoginStepInputRequired
+	return json.Marshal(struct {
+		Kind AuthLoginStepKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthLoginStepNeedsInteraction) MarshalJSON() ([]byte, error) {
+	type alias AuthLoginStepNeedsInteraction
+	return json.Marshal(struct {
+		Kind AuthLoginStepKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthLoginStepOpenURL) MarshalJSON() ([]byte, error) {
+	type alias AuthLoginStepOpenURL
+	return json.Marshal(struct {
+		Kind AuthLoginStepKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *AuthLoginBegun) UnmarshalJSON(data []byte) error {
+	type rawAuthLoginBegun struct {
+		FlowID string          `json:"flowId"`
+		Step   json.RawMessage `json:"step"`
+	}
+	var raw rawAuthLoginBegun
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.FlowID = raw.FlowID
+	if raw.Step != nil {
+		value, err := unmarshalAuthLoginStep(raw.Step)
+		if err != nil {
+			return err
+		}
+		r.Step = value
+	}
+	return nil
+}
+
+func unmarshalAuthReadValue(data []byte) (AuthReadValue, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind AuthReadValueKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case AuthReadValueKindActiveAccount:
+		var d AuthReadValueActiveAccount
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthReadValueKindLastErrors:
+		var d AuthReadValueLastErrors
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case AuthReadValueKindStatus:
+		var d AuthReadValueStatus
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawAuthReadValueData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawAuthReadValueData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind AuthReadValueKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r AuthReadValueActiveAccount) MarshalJSON() ([]byte, error) {
+	type alias AuthReadValueActiveAccount
+	return json.Marshal(struct {
+		Kind AuthReadValueKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthReadValueLastErrors) MarshalJSON() ([]byte, error) {
+	type alias AuthReadValueLastErrors
+	return json.Marshal(struct {
+		Kind AuthReadValueKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r AuthReadValueStatus) MarshalJSON() ([]byte, error) {
+	type alias AuthReadValueStatus
+	return json.Marshal(struct {
+		Kind AuthReadValueKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
 func unmarshalBuiltinToolSafeForTelemetry(data []byte) (BuiltinToolSafeForTelemetry, error) {
 	if string(data) == "null" {
 		return nil, nil
@@ -696,6 +1267,12 @@ func unmarshalCatalogCandidate(data []byte) (CatalogCandidate, error) {
 			return nil, err
 		}
 		return &d, nil
+	case CatalogCandidateKindPlugin:
+		var d CatalogAgentPluginCandidate
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
 	default:
 		return &RawCatalogCandidateData{Discriminator: raw.Kind, Raw: data}, nil
 	}
@@ -709,69 +1286,6 @@ func (r RawCatalogCandidateData) MarshalJSON() ([]byte, error) {
 		Kind CatalogCandidateKind `json:"kind"`
 	}{
 		Kind: r.Discriminator,
-	})
-}
-
-func unmarshalCatalogCandidateSource(data []byte) (CatalogCandidateSource, error) {
-	if string(data) == "null" {
-		return nil, nil
-	}
-	type rawUnion struct {
-		Kind CatalogCandidateSourceKind `json:"kind"`
-	}
-	var raw rawUnion
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
-	}
-
-	switch raw.Kind {
-	case CatalogCandidateSourceKindEmbedded:
-		var d CatalogCandidateSourceEmbedded
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	case CatalogCandidateSourceKindURL:
-		var d CatalogCandidateSourceURL
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	default:
-		return &RawCatalogCandidateSourceData{Discriminator: raw.Kind, Raw: data}, nil
-	}
-}
-
-func (r RawCatalogCandidateSourceData) MarshalJSON() ([]byte, error) {
-	if r.Raw != nil {
-		return r.Raw, nil
-	}
-	return json.Marshal(struct {
-		Kind CatalogCandidateSourceKind `json:"kind"`
-	}{
-		Kind: r.Discriminator,
-	})
-}
-
-func (r CatalogCandidateSourceEmbedded) MarshalJSON() ([]byte, error) {
-	type alias CatalogCandidateSourceEmbedded
-	return json.Marshal(struct {
-		Kind CatalogCandidateSourceKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
-func (r CatalogCandidateSourceURL) MarshalJSON() ([]byte, error) {
-	type alias CatalogCandidateSourceURL
-	return json.Marshal(struct {
-		Kind CatalogCandidateSourceKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
 	})
 }
 
@@ -1105,18 +1619,128 @@ func (r CatalogTrustSnapshotUnsupported) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (r *CatalogAgentPluginCandidate) UnmarshalJSON(data []byte) error {
+	type rawCatalogAgentPluginCandidate struct {
+		CompatibilityTags []CatalogAgentPluginCompatibilityTag  `json:"compatibilityTags"`
+		Description       *string                               `json:"description,omitempty"`
+		DisplayName       string                                `json:"displayName"`
+		Identity          string                                `json:"identity"`
+		MediaType         CatalogAgentPluginMediaType           `json:"mediaType"`
+		Provenance        CatalogAgentPluginCandidateProvenance `json:"provenance"`
+		Publisher         *string                               `json:"publisher,omitempty"`
+		Source            CatalogPluginRepositorySource         `json:"source"`
+		Trust             json.RawMessage                       `json:"trust,omitempty"`
+		Version           *string                               `json:"version,omitempty"`
+	}
+	var raw rawCatalogAgentPluginCandidate
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.CompatibilityTags = raw.CompatibilityTags
+	r.Description = raw.Description
+	r.DisplayName = raw.DisplayName
+	r.Identity = raw.Identity
+	r.MediaType = raw.MediaType
+	r.Provenance = raw.Provenance
+	r.Publisher = raw.Publisher
+	r.Source = raw.Source
+	if raw.Trust != nil {
+		value, err := unmarshalCatalogTrustSnapshot(raw.Trust)
+		if err != nil {
+			return err
+		}
+		r.Trust = value
+	}
+	r.Version = raw.Version
+	return nil
+}
+
+func (r CatalogAgentPluginCandidate) MarshalJSON() ([]byte, error) {
+	type alias CatalogAgentPluginCandidate
+	return json.Marshal(struct {
+		Kind CatalogCandidateKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalCatalogCandidateSource(data []byte) (CatalogCandidateSource, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind CatalogCandidateSourceKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case CatalogCandidateSourceKindEmbedded:
+		var d CatalogCandidateSourceEmbedded
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogCandidateSourceKindURL:
+		var d CatalogCandidateSourceURL
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawCatalogCandidateSourceData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawCatalogCandidateSourceData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind CatalogCandidateSourceKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r CatalogCandidateSourceEmbedded) MarshalJSON() ([]byte, error) {
+	type alias CatalogCandidateSourceEmbedded
+	return json.Marshal(struct {
+		Kind CatalogCandidateSourceKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogCandidateSourceURL) MarshalJSON() ([]byte, error) {
+	type alias CatalogCandidateSourceURL
+	return json.Marshal(struct {
+		Kind CatalogCandidateSourceKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
 func (r *CatalogAiSkillCandidate) UnmarshalJSON(data []byte) error {
 	type rawCatalogAiSkillCandidate struct {
-		Description     *string                               `json:"description,omitempty"`
-		DisplayName     string                                `json:"displayName"`
-		Handle          string                                `json:"handle"`
-		HandleExpiresAt string                                `json:"handleExpiresAt"`
-		Installability  CatalogAiSkillCandidateInstallability `json:"installability"`
-		MediaType       CatalogAiSkillCandidateMediaType      `json:"mediaType"`
-		Provenance      CatalogAiSkillCandidateProvenance     `json:"provenance"`
-		Publisher       *string                               `json:"publisher,omitempty"`
-		Source          json.RawMessage                       `json:"source"`
-		Trust           json.RawMessage                       `json:"trust,omitempty"`
+		Description     *string                           `json:"description,omitempty"`
+		DisplayName     string                            `json:"displayName"`
+		Handle          string                            `json:"handle"`
+		HandleExpiresAt string                            `json:"handleExpiresAt"`
+		Installability  CatalogAiSkillInstallability      `json:"installability"`
+		MediaType       CatalogAiSkillMediaType           `json:"mediaType"`
+		Provenance      CatalogAiSkillCandidateProvenance `json:"provenance"`
+		Publisher       *string                           `json:"publisher,omitempty"`
+		Source          json.RawMessage                   `json:"source"`
+		Trust           json.RawMessage                   `json:"trust,omitempty"`
 	}
 	var raw rawCatalogAiSkillCandidate
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -1387,6 +2011,7 @@ func (r *CatalogSearchSucceeded) UnmarshalJSON(data []byte) error {
 	type rawCatalogSearchSucceeded struct {
 		Candidates []json.RawMessage         `json:"candidates"`
 		Negotiated CatalogNegotiatedContract `json:"negotiated"`
+		Pagination *CatalogSearchPagination  `json:"pagination,omitempty"`
 		SearchID   string                    `json:"searchId"`
 		Truncated  bool                      `json:"truncated"`
 	}
@@ -1405,6 +2030,7 @@ func (r *CatalogSearchSucceeded) UnmarshalJSON(data []byte) error {
 		}
 	}
 	r.Negotiated = raw.Negotiated
+	r.Pagination = raw.Pagination
 	r.SearchID = raw.SearchID
 	r.Truncated = raw.Truncated
 	return nil
@@ -1450,6 +2076,206 @@ func (r CatalogUnsupportedKindError) MarshalJSON() ([]byte, error) {
 		alias
 	}{
 		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalCatalogSelectionResult(data []byte) (CatalogSelectionResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case CatalogSelectionResultKindCancelled:
+		var d CatalogSelectionCancelled
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindDeclined:
+		var d CatalogSelectionDeclined
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindForeign:
+		var d CatalogSelectionForeign
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindInvalid:
+		var d CatalogSelectionInvalid
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindInvalidRequest:
+		var d CatalogInvalidRequestError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindNegotiationRefused:
+		var d CatalogNegotiationRefusedError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindReplayed:
+		var d CatalogSelectionReplayed
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindSelected:
+		var d CatalogSelectionSelected
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindStale:
+		var d CatalogSelectionStale
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindTimedOut:
+		var d CatalogSelectionTimedOut
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindUnavailable:
+		var d CatalogUnavailableError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case CatalogSelectionResultKindWrongKind:
+		var d CatalogSelectionWrongKind
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawCatalogSelectionResultData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawCatalogSelectionResultData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r CatalogSelectionCancelled) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionCancelled
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionDeclined) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionDeclined
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionForeign) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionForeign
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionInvalid) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionInvalid
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionReplayed) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionReplayed
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionSelected) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionSelected
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionStale) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionStale
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionTimedOut) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionTimedOut
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
+		alias: alias(r),
+	})
+}
+
+func (r CatalogSelectionWrongKind) MarshalJSON() ([]byte, error) {
+	type alias CatalogSelectionWrongKind
+	return json.Marshal(struct {
+		Kind CatalogSelectionResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.catalogSelectionResultKind(),
 		alias: alias(r),
 	})
 }
@@ -1526,6 +2352,86 @@ func (r *CommandsRespondToQueuedCommandRequest) UnmarshalJSON(data []byte) error
 		r.Result = value
 	}
 	return nil
+}
+
+func unmarshalConnectorConnectResult(data []byte) (ConnectorConnectResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind ConnectorConnectResultKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case ConnectorConnectResultKindConnected:
+		var d ConnectorConnectResultConnected
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case ConnectorConnectResultKindConsentRequired:
+		var d ConnectorConnectResultConsentRequired
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case ConnectorConnectResultKindPending:
+		var d ConnectorConnectResultPending
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawConnectorConnectResultData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawConnectorConnectResultData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind ConnectorConnectResultKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r ConnectorConnectResultConnected) MarshalJSON() ([]byte, error) {
+	type alias ConnectorConnectResultConnected
+	return json.Marshal(struct {
+		Kind ConnectorConnectResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r ConnectorConnectResultConsentRequired) MarshalJSON() ([]byte, error) {
+	type alias ConnectorConnectResultConsentRequired
+	return json.Marshal(struct {
+		Kind ConnectorConnectResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r ConnectorConnectResultPending) MarshalJSON() ([]byte, error) {
+	type alias ConnectorConnectResultPending
+	return json.Marshal(struct {
+		Kind ConnectorConnectResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
 }
 
 func unmarshalDebugCollectLogsDestination(data []byte) (DebugCollectLogsDestination, error) {
@@ -1611,6 +2517,123 @@ func (r *DebugCollectLogsRequest) UnmarshalJSON(data []byte) error {
 	}
 	r.Include = raw.Include
 	return nil
+}
+
+func unmarshalEnqueueCommandResult(data []byte) (EnqueueCommandResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Queued *bool `json:"queued"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	if raw.Queued == nil {
+		return nil, errors.New("data did not match any union variant for EnqueueCommandResult")
+	}
+
+	switch *raw.Queued {
+	case false:
+		var d UnsupportedEnqueueCommandResult
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case true:
+		var d AcceptedEnqueueCommandResult
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	}
+	return nil, errors.New("data did not match any union variant for EnqueueCommandResult")
+}
+
+func (r AcceptedEnqueueCommandResult) MarshalJSON() ([]byte, error) {
+	type alias AcceptedEnqueueCommandResult
+	return json.Marshal(struct {
+		Queued bool `json:"queued"`
+		alias
+	}{
+		Queued: r.Queued(),
+		alias:  alias(r),
+	})
+}
+
+func (r UnsupportedEnqueueCommandResult) MarshalJSON() ([]byte, error) {
+	type alias UnsupportedEnqueueCommandResult
+	return json.Marshal(struct {
+		Queued bool `json:"queued"`
+		alias
+	}{
+		Queued: r.Queued(),
+		alias:  alias(r),
+	})
+}
+
+func unmarshalEntraTokenAcquireResult(data []byte) (EntraTokenAcquireResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Status EntraTokenAcquireResultStatus `json:"status"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Status {
+	case EntraTokenAcquireResultStatusInteractionRequired:
+		var d EntraTokenAcquireResultInteractionRequired
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case EntraTokenAcquireResultStatusOk:
+		var d EntraTokenAcquireResultOk
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawEntraTokenAcquireResultData{Discriminator: raw.Status, Raw: data}, nil
+	}
+}
+
+func (r RawEntraTokenAcquireResultData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Status EntraTokenAcquireResultStatus `json:"status"`
+	}{
+		Status: r.Discriminator,
+	})
+}
+
+func (r EntraTokenAcquireResultInteractionRequired) MarshalJSON() ([]byte, error) {
+	type alias EntraTokenAcquireResultInteractionRequired
+	return json.Marshal(struct {
+		Status EntraTokenAcquireResultStatus `json:"status"`
+		alias
+	}{
+		Status: r.Status(),
+		alias:  alias(r),
+	})
+}
+
+func (r EntraTokenAcquireResultOk) MarshalJSON() ([]byte, error) {
+	type alias EntraTokenAcquireResultOk
+	return json.Marshal(struct {
+		Status EntraTokenAcquireResultStatus `json:"status"`
+		alias
+	}{
+		Status: r.Status(),
+		alias:  alias(r),
+	})
 }
 
 func (r EventLogTypes) MarshalJSON() ([]byte, error) {
@@ -1921,255 +2944,6 @@ func unmarshalExternalToolResult(data []byte) (ExternalToolResult, error) {
 	return nil, errors.New("data did not match any union variant for ExternalToolResult")
 }
 
-func unmarshalFactoryRunFailure(data []byte) (FactoryRunFailure, error) {
-	if string(data) == "null" {
-		return nil, nil
-	}
-	type rawUnion struct {
-		Type FactoryRunFailureType `json:"type"`
-	}
-	var raw rawUnion
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
-	}
-
-	switch raw.Type {
-	case FactoryRunFailureTypeFactoryAccountingIncomplete:
-		var d FactoryRunFailureFactoryAccountingIncomplete
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	case FactoryRunFailureTypeFactoryDurableFailure:
-		var d FactoryRunFailureFactoryDurableFailure
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	case FactoryRunFailureTypeFactoryLimitReached:
-		var d FactoryRunFailureFactoryLimitReached
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	case FactoryRunFailureTypeFactoryProviderDisconnected:
-		var d FactoryRunFailureFactoryProviderDisconnected
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	case FactoryRunFailureTypeFactoryResumeDeclined:
-		var d FactoryRunFailureFactoryResumeDeclined
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	default:
-		return &RawFactoryRunFailureData{Discriminator: raw.Type, Raw: data}, nil
-	}
-}
-
-func (r RawFactoryRunFailureData) MarshalJSON() ([]byte, error) {
-	if r.Raw != nil {
-		return r.Raw, nil
-	}
-	return json.Marshal(struct {
-		Type FactoryRunFailureType `json:"type"`
-	}{
-		Type: r.Discriminator,
-	})
-}
-
-func (r FactoryRunFailureFactoryAccountingIncomplete) MarshalJSON() ([]byte, error) {
-	type alias FactoryRunFailureFactoryAccountingIncomplete
-	return json.Marshal(struct {
-		Type FactoryRunFailureType `json:"type"`
-		alias
-	}{
-		Type:  r.Type(),
-		alias: alias(r),
-	})
-}
-
-func (r FactoryRunFailureFactoryDurableFailure) MarshalJSON() ([]byte, error) {
-	type alias FactoryRunFailureFactoryDurableFailure
-	return json.Marshal(struct {
-		Type FactoryRunFailureType `json:"type"`
-		alias
-	}{
-		Type:  r.Type(),
-		alias: alias(r),
-	})
-}
-
-func (r FactoryRunFailureFactoryLimitReached) MarshalJSON() ([]byte, error) {
-	type alias FactoryRunFailureFactoryLimitReached
-	return json.Marshal(struct {
-		Type FactoryRunFailureType `json:"type"`
-		alias
-	}{
-		Type:  r.Type(),
-		alias: alias(r),
-	})
-}
-
-func (r FactoryRunFailureFactoryProviderDisconnected) MarshalJSON() ([]byte, error) {
-	type alias FactoryRunFailureFactoryProviderDisconnected
-	return json.Marshal(struct {
-		Type FactoryRunFailureType `json:"type"`
-		alias
-	}{
-		Type:  r.Type(),
-		alias: alias(r),
-	})
-}
-
-func (r FactoryRunFailureFactoryResumeDeclined) MarshalJSON() ([]byte, error) {
-	type alias FactoryRunFailureFactoryResumeDeclined
-	return json.Marshal(struct {
-		Type FactoryRunFailureType `json:"type"`
-		alias
-	}{
-		Type:  r.Type(),
-		alias: alias(r),
-	})
-}
-
-func unmarshalFactoryPauseInfo(data []byte) (FactoryPauseInfo, error) {
-	if string(data) == "null" {
-		return nil, nil
-	}
-	type rawUnion struct {
-		Type FactoryPauseInfoType `json:"type"`
-	}
-	var raw rawUnion
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
-	}
-
-	switch raw.Type {
-	case FactoryPauseInfoTypeCheckpoint:
-		var d FactoryPauseInfoCheckpoint
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	case FactoryPauseInfoTypeUser:
-		var d FactoryPauseInfoUser
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	default:
-		return &RawFactoryPauseInfoData{Discriminator: raw.Type, Raw: data}, nil
-	}
-}
-
-func (r RawFactoryPauseInfoData) MarshalJSON() ([]byte, error) {
-	if r.Raw != nil {
-		return r.Raw, nil
-	}
-	return json.Marshal(struct {
-		Type FactoryPauseInfoType `json:"type"`
-	}{
-		Type: r.Discriminator,
-	})
-}
-
-func (r FactoryPauseInfoCheckpoint) MarshalJSON() ([]byte, error) {
-	type alias FactoryPauseInfoCheckpoint
-	return json.Marshal(struct {
-		Type FactoryPauseInfoType `json:"type"`
-		alias
-	}{
-		Type:  r.Type(),
-		alias: alias(r),
-	})
-}
-
-func (r FactoryPauseInfoUser) MarshalJSON() ([]byte, error) {
-	type alias FactoryPauseInfoUser
-	return json.Marshal(struct {
-		Type FactoryPauseInfoType `json:"type"`
-		alias
-	}{
-		Type:  r.Type(),
-		alias: alias(r),
-	})
-}
-
-func (r *FactoryRunTerminal) UnmarshalJSON(data []byte) error {
-	type rawFactoryRunTerminal struct {
-		Error         *string         `json:"error,omitempty"`
-		Failure       json.RawMessage `json:"failure,omitempty"`
-		PauseInfo     json.RawMessage `json:"pauseInfo"`
-		Reason        *string         `json:"reason,omitempty"`
-		ResultPreview *string         `json:"resultPreview,omitempty"`
-	}
-	var raw rawFactoryRunTerminal
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	r.Error = raw.Error
-	if raw.Failure != nil {
-		value, err := unmarshalFactoryRunFailure(raw.Failure)
-		if err != nil {
-			return err
-		}
-		r.Failure = value
-	}
-	if raw.PauseInfo != nil {
-		value, err := unmarshalFactoryPauseInfo(raw.PauseInfo)
-		if err != nil {
-			return err
-		}
-		r.PauseInfo = value
-	}
-	r.Reason = raw.Reason
-	r.ResultPreview = raw.ResultPreview
-	return nil
-}
-
-func (r *FactoryRunResult) UnmarshalJSON(data []byte) error {
-	type rawFactoryRunResult struct {
-		Attempt   *int64           `json:"attempt,omitempty"`
-		Error     *string          `json:"error,omitempty"`
-		Failure   json.RawMessage  `json:"failure,omitempty"`
-		PauseInfo json.RawMessage  `json:"pauseInfo,omitempty"`
-		Reason    *string          `json:"reason,omitempty"`
-		Result    any              `json:"result,omitempty"`
-		RunID     string           `json:"runId"`
-		Snapshot  any              `json:"snapshot,omitempty"`
-		Status    FactoryRunStatus `json:"status"`
-	}
-	var raw rawFactoryRunResult
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	r.Attempt = raw.Attempt
-	r.Error = raw.Error
-	if raw.Failure != nil {
-		value, err := unmarshalFactoryRunFailure(raw.Failure)
-		if err != nil {
-			return err
-		}
-		r.Failure = value
-	}
-	if raw.PauseInfo != nil {
-		value, err := unmarshalFactoryPauseInfo(raw.PauseInfo)
-		if err != nil {
-			return err
-		}
-		r.PauseInfo = value
-	}
-	r.Reason = raw.Reason
-	r.Result = raw.Result
-	r.RunID = raw.RunID
-	r.Snapshot = raw.Snapshot
-	r.Status = raw.Status
-	return nil
-}
-
 func unmarshalFilterMapping(data []byte) (FilterMapping, error) {
 	if string(data) == "null" {
 		return nil, nil
@@ -2301,483 +3075,118 @@ func (r *HandlePendingToolCallRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (r InstalledPluginSource) MarshalJSON() ([]byte, error) {
-	if r.InstalledPluginSourceGitHub != nil {
-		return json.Marshal(r.InstalledPluginSourceGitHub)
+func (r *InstallationCatalogueIdentity) UnmarshalJSON(data []byte) error {
+	type rawInstallationCatalogueIdentity struct {
+		Description    *string         `json:"description,omitempty"`
+		DisplayName    string          `json:"displayName"`
+		ItemURL        *string         `json:"itemUrl,omitempty"`
+		Publisher      *string         `json:"publisher,omitempty"`
+		ResourceID     *string         `json:"resourceId,omitempty"`
+		Source         string          `json:"source"`
+		TrustAtInstall json.RawMessage `json:"trustAtInstall,omitempty"`
+		Version        *string         `json:"version,omitempty"`
 	}
-	if r.InstalledPluginSourceLocal != nil {
-		return json.Marshal(r.InstalledPluginSourceLocal)
-	}
-	if r.InstalledPluginSourceURL != nil {
-		return json.Marshal(r.InstalledPluginSourceURL)
-	}
-	if r.String != nil {
-		return json.Marshal(r.String)
-	}
-	return []byte("null"), nil
-}
-
-func (r *InstalledPluginSource) UnmarshalJSON(data []byte) error {
-	if string(data) == "null" {
-		*r = InstalledPluginSource{}
-		return nil
-	}
-	{
-		var value InstalledPluginSourceGitHub
-		if err := json.Unmarshal(data, &value); err == nil {
-			*r = InstalledPluginSource{InstalledPluginSourceGitHub: &value}
-			return nil
-		}
-	}
-	{
-		var value InstalledPluginSourceLocal
-		if err := json.Unmarshal(data, &value); err == nil {
-			*r = InstalledPluginSource{InstalledPluginSourceLocal: &value}
-			return nil
-		}
-	}
-	{
-		var value InstalledPluginSourceURL
-		if err := json.Unmarshal(data, &value); err == nil {
-			*r = InstalledPluginSource{InstalledPluginSourceURL: &value}
-			return nil
-		}
-	}
-	{
-		var value string
-		if err := json.Unmarshal(data, &value); err == nil {
-			*r = InstalledPluginSource{String: &value}
-			return nil
-		}
-	}
-	return errors.New("data did not match any union variant for InstalledPluginSource")
-}
-
-func matchesMCPSerializableServerConfigMCPServerConfigHTTP(data []byte) bool {
-	var rawGroup0 struct {
-		Command json.RawMessage `json:"command"`
-		URL     json.RawMessage `json:"url"`
-	}
-	if err := json.Unmarshal(data, &rawGroup0); err != nil {
-		return false
-	}
-	if rawGroup0.URL == nil {
-		return false
-	}
-	return rawGroup0.Command == nil
-}
-
-func matchesMCPSerializableServerConfigMCPServerConfigStdio(data []byte) bool {
-	var rawGroup0 struct {
-		Command json.RawMessage `json:"command"`
-		URL     json.RawMessage `json:"url"`
-	}
-	if err := json.Unmarshal(data, &rawGroup0); err != nil {
-		return false
-	}
-	if rawGroup0.Command == nil {
-		return false
-	}
-	return rawGroup0.URL == nil
-}
-
-func unmarshalMCPSerializableServerConfig(data []byte) (MCPSerializableServerConfig, error) {
-	if string(data) == "null" {
-		return nil, nil
-	}
-	if matchesMCPSerializableServerConfigMCPServerConfigHTTP(data) {
-		var d MCPServerConfigHTTP
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	}
-	if matchesMCPSerializableServerConfigMCPServerConfigStdio(data) {
-		var d MCPServerConfigStdio
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	}
-	return &RawMCPSerializableServerConfigData{Raw: data}, nil
-}
-
-func (r RawMCPSerializableServerConfigData) MarshalJSON() ([]byte, error) {
-	if r.Raw != nil {
-		return r.Raw, nil
-	}
-	return []byte("null"), nil
-}
-
-func unmarshalMCPServerAuthConfig(data []byte) (MCPServerAuthConfig, error) {
-	if string(data) == "null" {
-		return nil, nil
-	}
-	{
-		var value bool
-		if err := json.Unmarshal(data, &value); err == nil {
-			return MCPServerAuthConfigBoolean(value), nil
-		}
-	}
-	{
-		var value MCPServerAuthConfigRedirectPort
-		if err := json.Unmarshal(data, &value); err == nil {
-			return &value, nil
-		}
-	}
-	return nil, errors.New("data did not match any union variant for MCPServerAuthConfig")
-}
-
-func unmarshalMCPSafeForTelemetry(data []byte) (MCPSafeForTelemetry, error) {
-	if string(data) == "null" {
-		return nil, nil
-	}
-	{
-		var value bool
-		if err := json.Unmarshal(data, &value); err == nil {
-			return MCPSafeForTelemetryBoolean(value), nil
-		}
-	}
-	{
-		var value MCPSafeForTelemetryFields
-		if err := json.Unmarshal(data, &value); err == nil {
-			return &value, nil
-		}
-	}
-	return nil, errors.New("data did not match any union variant for MCPSafeForTelemetry")
-}
-
-func (r *MCPServerConfigHTTP) UnmarshalJSON(data []byte) error {
-	type rawMCPServerConfigHTTP struct {
-		Auth                 json.RawMessage                    `json:"auth,omitempty"`
-		ConfigWarnings       []string                           `json:"configWarnings,omitzero"`
-		DeferTools           *MCPServerConfigDeferTools         `json:"deferTools,omitempty"`
-		DisableSecretMasking *bool                              `json:"disableSecretMasking,omitempty"`
-		DisableToolCache     *bool                              `json:"disableToolCache,omitempty"`
-		DisplayName          *string                            `json:"displayName,omitempty"`
-		Events               []string                           `json:"events,omitzero"`
-		ExcludeTools         []string                           `json:"excludeTools,omitzero"`
-		FilterMapping        json.RawMessage                    `json:"filterMapping,omitempty"`
-		Headers              map[string]string                  `json:"headers,omitzero"`
-		HeadersRefreshTtlMs  *int64                             `json:"headersRefreshTtlMs,omitempty"`
-		IsDefaultServer      *bool                              `json:"isDefaultServer,omitempty"`
-		Notifications        []string                           `json:"notifications,omitzero"`
-		OauthClientID        *string                            `json:"oauthClientId,omitempty"`
-		OauthGrantType       *MCPServerConfigHTTPOauthGrantType `json:"oauthGrantType,omitempty"`
-		OauthPublicClient    *bool                              `json:"oauthPublicClient,omitempty"`
-		Oidc                 json.RawMessage                    `json:"oidc,omitempty"`
-		SafeForTelemetry     json.RawMessage                    `json:"safeForTelemetry,omitempty"`
-		Source               *MCPServerSource                   `json:"source,omitempty"`
-		SourcePath           *string                            `json:"sourcePath,omitempty"`
-		SourcePlugin         *string                            `json:"sourcePlugin,omitempty"`
-		SourcePluginSpec     *bool                              `json:"sourcePluginSpec,omitempty"`
-		SourcePluginVersion  *string                            `json:"sourcePluginVersion,omitempty"`
-		Timeout              *int64                             `json:"timeout,omitempty"`
-		Tools                []string                           `json:"tools,omitzero"`
-		Type                 *MCPServerConfigHTTPType           `json:"type,omitempty"`
-		URL                  string                             `json:"url"`
-	}
-	var raw rawMCPServerConfigHTTP
+	var raw rawInstallationCatalogueIdentity
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
-	if raw.Auth != nil {
-		value, err := unmarshalMCPServerAuthConfig(raw.Auth)
-		if err != nil {
-			return err
-		}
-		r.Auth = value
-	}
-	r.ConfigWarnings = raw.ConfigWarnings
-	r.DeferTools = raw.DeferTools
-	r.DisableSecretMasking = raw.DisableSecretMasking
-	r.DisableToolCache = raw.DisableToolCache
+	r.Description = raw.Description
 	r.DisplayName = raw.DisplayName
-	r.Events = raw.Events
-	r.ExcludeTools = raw.ExcludeTools
-	if raw.FilterMapping != nil {
-		value, err := unmarshalFilterMapping(raw.FilterMapping)
-		if err != nil {
-			return err
-		}
-		r.FilterMapping = value
-	}
-	r.Headers = raw.Headers
-	r.HeadersRefreshTtlMs = raw.HeadersRefreshTtlMs
-	r.IsDefaultServer = raw.IsDefaultServer
-	r.Notifications = raw.Notifications
-	r.OauthClientID = raw.OauthClientID
-	r.OauthGrantType = raw.OauthGrantType
-	r.OauthPublicClient = raw.OauthPublicClient
-	if raw.Oidc != nil {
-		value, err := unmarshalMCPServerAuthConfig(raw.Oidc)
-		if err != nil {
-			return err
-		}
-		r.Oidc = value
-	}
-	if raw.SafeForTelemetry != nil {
-		value, err := unmarshalMCPSafeForTelemetry(raw.SafeForTelemetry)
-		if err != nil {
-			return err
-		}
-		r.SafeForTelemetry = value
-	}
+	r.ItemURL = raw.ItemURL
+	r.Publisher = raw.Publisher
+	r.ResourceID = raw.ResourceID
 	r.Source = raw.Source
-	r.SourcePath = raw.SourcePath
-	r.SourcePlugin = raw.SourcePlugin
-	r.SourcePluginSpec = raw.SourcePluginSpec
-	r.SourcePluginVersion = raw.SourcePluginVersion
-	r.Timeout = raw.Timeout
-	r.Tools = raw.Tools
-	r.Type = raw.Type
-	r.URL = raw.URL
+	if raw.TrustAtInstall != nil {
+		value, err := unmarshalCatalogTrustSnapshot(raw.TrustAtInstall)
+		if err != nil {
+			return err
+		}
+		r.TrustAtInstall = value
+	}
+	r.Version = raw.Version
 	return nil
 }
 
-func (r *MCPServerConfigStdio) UnmarshalJSON(data []byte) error {
-	type rawMCPServerConfigStdio struct {
-		Args                 []string                   `json:"args,omitzero"`
-		Auth                 json.RawMessage            `json:"auth,omitempty"`
-		Command              string                     `json:"command"`
-		ConfigWarnings       []string                   `json:"configWarnings,omitzero"`
-		Cwd                  *string                    `json:"cwd,omitempty"`
-		DeferTools           *MCPServerConfigDeferTools `json:"deferTools,omitempty"`
-		DisableSecretMasking *bool                      `json:"disableSecretMasking,omitempty"`
-		DisableToolCache     *bool                      `json:"disableToolCache,omitempty"`
-		DisplayName          *string                    `json:"displayName,omitempty"`
-		Env                  map[string]string          `json:"env,omitzero"`
-		Events               []string                   `json:"events,omitzero"`
-		ExcludeTools         []string                   `json:"excludeTools,omitzero"`
-		FilterMapping        json.RawMessage            `json:"filterMapping,omitempty"`
-		IsDefaultServer      *bool                      `json:"isDefaultServer,omitempty"`
-		Notifications        []string                   `json:"notifications,omitzero"`
-		Oidc                 json.RawMessage            `json:"oidc,omitempty"`
-		SafeForTelemetry     json.RawMessage            `json:"safeForTelemetry,omitempty"`
-		Source               *MCPServerSource           `json:"source,omitempty"`
-		SourcePath           *string                    `json:"sourcePath,omitempty"`
-		SourcePlugin         *string                    `json:"sourcePlugin,omitempty"`
-		SourcePluginSpec     *bool                      `json:"sourcePluginSpec,omitempty"`
-		SourcePluginVersion  *string                    `json:"sourcePluginVersion,omitempty"`
-		Timeout              *int64                     `json:"timeout,omitempty"`
-		Tools                []string                   `json:"tools,omitzero"`
-		Type                 *MCPServerConfigStdioType  `json:"type,omitempty"`
-	}
-	var raw rawMCPServerConfigStdio
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	r.Args = raw.Args
-	if raw.Auth != nil {
-		value, err := unmarshalMCPServerAuthConfig(raw.Auth)
-		if err != nil {
-			return err
-		}
-		r.Auth = value
-	}
-	r.Command = raw.Command
-	r.ConfigWarnings = raw.ConfigWarnings
-	r.Cwd = raw.Cwd
-	r.DeferTools = raw.DeferTools
-	r.DisableSecretMasking = raw.DisableSecretMasking
-	r.DisableToolCache = raw.DisableToolCache
-	r.DisplayName = raw.DisplayName
-	r.Env = raw.Env
-	r.Events = raw.Events
-	r.ExcludeTools = raw.ExcludeTools
-	if raw.FilterMapping != nil {
-		value, err := unmarshalFilterMapping(raw.FilterMapping)
-		if err != nil {
-			return err
-		}
-		r.FilterMapping = value
-	}
-	r.IsDefaultServer = raw.IsDefaultServer
-	r.Notifications = raw.Notifications
-	if raw.Oidc != nil {
-		value, err := unmarshalMCPServerAuthConfig(raw.Oidc)
-		if err != nil {
-			return err
-		}
-		r.Oidc = value
-	}
-	if raw.SafeForTelemetry != nil {
-		value, err := unmarshalMCPSafeForTelemetry(raw.SafeForTelemetry)
-		if err != nil {
-			return err
-		}
-		r.SafeForTelemetry = value
-	}
-	r.Source = raw.Source
-	r.SourcePath = raw.SourcePath
-	r.SourcePlugin = raw.SourcePlugin
-	r.SourcePluginSpec = raw.SourcePluginSpec
-	r.SourcePluginVersion = raw.SourcePluginVersion
-	r.Timeout = raw.Timeout
-	r.Tools = raw.Tools
-	r.Type = raw.Type
-	return nil
-}
-
-func (r *MCPConfigAddRequest) UnmarshalJSON(data []byte) error {
-	type rawMCPConfigAddRequest struct {
-		Config json.RawMessage `json:"config"`
-		Name   string          `json:"name"`
-	}
-	var raw rawMCPConfigAddRequest
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	if raw.Config != nil {
-		value, err := unmarshalMCPSerializableServerConfig(raw.Config)
-		if err != nil {
-			return err
-		}
-		r.Config = value
-	}
-	r.Name = raw.Name
-	return nil
-}
-
-func (r *MCPConfigList) UnmarshalJSON(data []byte) error {
-	type rawMCPConfigList struct {
-		Servers map[string]json.RawMessage `json:"servers"`
-	}
-	var raw rawMCPConfigList
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	if raw.Servers != nil {
-		r.Servers = make(map[string]MCPSerializableServerConfig, len(raw.Servers))
-		for key, rawValue := range raw.Servers {
-			value, err := unmarshalMCPSerializableServerConfig(rawValue)
-			if err != nil {
-				return err
-			}
-			r.Servers[key] = value
-		}
-	}
-	return nil
-}
-
-func (r *MCPConfigUpdateRequest) UnmarshalJSON(data []byte) error {
-	type rawMCPConfigUpdateRequest struct {
-		Config json.RawMessage `json:"config"`
-		Name   string          `json:"name"`
-	}
-	var raw rawMCPConfigUpdateRequest
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	if raw.Config != nil {
-		value, err := unmarshalMCPSerializableServerConfig(raw.Config)
-		if err != nil {
-			return err
-		}
-		r.Config = value
-	}
-	r.Name = raw.Name
-	return nil
-}
-
-func unmarshalMCPHeadersHandlePendingHeadersRefreshRequest(data []byte) (MCPHeadersHandlePendingHeadersRefreshRequest, error) {
+func unmarshalInstallationReview(data []byte) (InstallationReview, error) {
 	if string(data) == "null" {
 		return nil, nil
 	}
 	type rawUnion struct {
-		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
+		Resource InstallationReviewResource `json:"resource"`
 	}
 	var raw rawUnion
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
 
-	switch raw.Kind {
-	case MCPHeadersHandlePendingHeadersRefreshRequestKindError:
-		var d MCPHeadersHandlePendingHeadersRefreshRequestError
+	switch raw.Resource {
+	case InstallationReviewResourceMCP:
+		var d InstallationReviewMCP
 		if err := json.Unmarshal(data, &d); err != nil {
 			return nil, err
 		}
 		return &d, nil
-	case MCPHeadersHandlePendingHeadersRefreshRequestKindHeaders:
-		var d MCPHeadersHandlePendingHeadersRefreshRequestHeaders
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
-	case MCPHeadersHandlePendingHeadersRefreshRequestKindNone:
-		var d MCPHeadersHandlePendingHeadersRefreshRequestNone
+	case InstallationReviewResourceSkill:
+		var d InstallationReviewSkill
 		if err := json.Unmarshal(data, &d); err != nil {
 			return nil, err
 		}
 		return &d, nil
 	default:
-		return &RawMCPHeadersHandlePendingHeadersRefreshRequestData{Discriminator: raw.Kind, Raw: data}, nil
+		return &RawInstallationReviewData{Discriminator: raw.Resource, Raw: data}, nil
 	}
 }
 
-func (r RawMCPHeadersHandlePendingHeadersRefreshRequestData) MarshalJSON() ([]byte, error) {
+func (r RawInstallationReviewData) MarshalJSON() ([]byte, error) {
 	if r.Raw != nil {
 		return r.Raw, nil
 	}
 	return json.Marshal(struct {
-		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
+		Resource InstallationReviewResource `json:"resource"`
 	}{
-		Kind: r.Discriminator,
+		Resource: r.Discriminator,
 	})
 }
 
-func (r MCPHeadersHandlePendingHeadersRefreshRequestError) MarshalJSON() ([]byte, error) {
-	type alias MCPHeadersHandlePendingHeadersRefreshRequestError
-	return json.Marshal(struct {
-		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
-func (r MCPHeadersHandlePendingHeadersRefreshRequestHeaders) MarshalJSON() ([]byte, error) {
-	type alias MCPHeadersHandlePendingHeadersRefreshRequestHeaders
-	return json.Marshal(struct {
-		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
-func (r MCPHeadersHandlePendingHeadersRefreshRequestNone) MarshalJSON() ([]byte, error) {
-	type alias MCPHeadersHandlePendingHeadersRefreshRequestNone
-	return json.Marshal(struct {
-		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
-func (r *MCPHeadersHandlePendingHeadersRefreshRequestRequest) UnmarshalJSON(data []byte) error {
-	type rawMCPHeadersHandlePendingHeadersRefreshRequestRequest struct {
-		RequestID string          `json:"requestId"`
-		Result    json.RawMessage `json:"result"`
+func unmarshalMCPInstallationReview(data []byte) (MCPInstallationReview, error) {
+	if string(data) == "null" {
+		return nil, nil
 	}
-	var raw rawMCPHeadersHandlePendingHeadersRefreshRequestRequest
+	type rawUnion struct {
+		Action MCPInstallationReviewAction `json:"action"`
+	}
+	var raw rawUnion
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
+		return nil, err
 	}
-	r.RequestID = raw.RequestID
-	if raw.Result != nil {
-		value, err := unmarshalMCPHeadersHandlePendingHeadersRefreshRequest(raw.Result)
-		if err != nil {
-			return err
+
+	switch raw.Action {
+	case MCPInstallationReviewActionInstall:
+		var d MCPInstallationReviewInstall
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
 		}
-		r.Result = value
+		return &d, nil
+	case MCPInstallationReviewActionUninstall:
+		var d MCPInstallationReviewUninstall
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawMCPInstallationReviewData{Discriminator: raw.Action, Raw: data}, nil
 	}
-	return nil
+}
+
+func (r RawMCPInstallationReviewData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Action MCPInstallationReviewAction `json:"action"`
+	}{
+		Action: r.Discriminator,
+	})
 }
 
 func unmarshalMCPPlanTransportChoice(data []byte) (MCPPlanTransportChoice, error) {
@@ -2977,6 +3386,1331 @@ func (r MCPPlanTransportChoiceRemote) MarshalJSON() ([]byte, error) {
 	}{
 		Transport: r.Transport(),
 		alias:     alias(r),
+	})
+}
+
+func (r *MCPInstallationReviewInstall) UnmarshalJSON(data []byte) error {
+	type rawMCPInstallationReviewInstall struct {
+		Catalogue              *InstallationCatalogueIdentity      `json:"catalogue,omitempty"`
+		CatalogueTrust         json.RawMessage                     `json:"catalogueTrust,omitempty"`
+		ConfigurationChange    MCPPlanConfigurationChange          `json:"configurationChange"`
+		EffectiveConfiguration *MCPInstallationRemoteConfiguration `json:"effectiveConfiguration,omitempty"`
+		Identity               MCPPlanResourceIdentity             `json:"identity"`
+		Inputs                 []MCPInstallationInput              `json:"inputs"`
+		Policy                 MCPPlanPolicyResult                 `json:"policy"`
+		Provenance             MCPPlanProvenance                   `json:"provenance"`
+		SecretStorage          MCPInstallationSecretStorage        `json:"secretStorage"`
+		SelectedChoice         json.RawMessage                     `json:"selectedChoice"`
+		SuppliedSecrets        []string                            `json:"suppliedSecrets"`
+		Target                 MCPPlanTarget                       `json:"target"`
+	}
+	var raw rawMCPInstallationReviewInstall
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Catalogue = raw.Catalogue
+	if raw.CatalogueTrust != nil {
+		value, err := unmarshalCatalogTrustSnapshot(raw.CatalogueTrust)
+		if err != nil {
+			return err
+		}
+		r.CatalogueTrust = value
+	}
+	r.ConfigurationChange = raw.ConfigurationChange
+	r.EffectiveConfiguration = raw.EffectiveConfiguration
+	r.Identity = raw.Identity
+	r.Inputs = raw.Inputs
+	r.Policy = raw.Policy
+	r.Provenance = raw.Provenance
+	r.SecretStorage = raw.SecretStorage
+	if raw.SelectedChoice != nil {
+		value, err := unmarshalMCPPlanTransportChoice(raw.SelectedChoice)
+		if err != nil {
+			return err
+		}
+		r.SelectedChoice = value
+	}
+	r.SuppliedSecrets = raw.SuppliedSecrets
+	r.Target = raw.Target
+	return nil
+}
+
+func (r MCPInstallationReviewInstall) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationReviewInstall
+	return json.Marshal(struct {
+		Action MCPInstallationReviewAction `json:"action"`
+		alias
+	}{
+		Action: r.Action(),
+		alias:  alias(r),
+	})
+}
+
+func (r MCPInstallationReviewUninstall) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationReviewUninstall
+	return json.Marshal(struct {
+		Action MCPInstallationReviewAction `json:"action"`
+		alias
+	}{
+		Action: r.Action(),
+		alias:  alias(r),
+	})
+}
+
+func (r *InstallationReviewMCP) UnmarshalJSON(data []byte) error {
+	type rawInstallationReviewMCP struct {
+		Review json.RawMessage `json:"review"`
+	}
+	var raw rawInstallationReviewMCP
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Review != nil {
+		value, err := unmarshalMCPInstallationReview(raw.Review)
+		if err != nil {
+			return err
+		}
+		r.Review = value
+	}
+	return nil
+}
+
+func (r InstallationReviewMCP) MarshalJSON() ([]byte, error) {
+	type alias InstallationReviewMCP
+	return json.Marshal(struct {
+		Resource InstallationReviewResource `json:"resource"`
+		alias
+	}{
+		Resource: r.Resource(),
+		alias:    alias(r),
+	})
+}
+
+func unmarshalSkillInstallationReview(data []byte) (SkillInstallationReview, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Action SkillInstallationReviewAction `json:"action"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Action {
+	case SkillInstallationReviewActionInstall:
+		var d SkillInstallationReviewInstall
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationReviewActionUninstall:
+		var d SkillInstallationReviewUninstall
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawSkillInstallationReviewData{Discriminator: raw.Action, Raw: data}, nil
+	}
+}
+
+func (r RawSkillInstallationReviewData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Action SkillInstallationReviewAction `json:"action"`
+	}{
+		Action: r.Discriminator,
+	})
+}
+
+func (r SkillInstallationReviewInstall) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationReviewInstall
+	return json.Marshal(struct {
+		Action SkillInstallationReviewAction `json:"action"`
+		alias
+	}{
+		Action: r.Action(),
+		alias:  alias(r),
+	})
+}
+
+func (r SkillInstallationReviewUninstall) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationReviewUninstall
+	return json.Marshal(struct {
+		Action SkillInstallationReviewAction `json:"action"`
+		alias
+	}{
+		Action: r.Action(),
+		alias:  alias(r),
+	})
+}
+
+func (r *InstallationReviewSkill) UnmarshalJSON(data []byte) error {
+	type rawInstallationReviewSkill struct {
+		Review json.RawMessage `json:"review"`
+	}
+	var raw rawInstallationReviewSkill
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Review != nil {
+		value, err := unmarshalSkillInstallationReview(raw.Review)
+		if err != nil {
+			return err
+		}
+		r.Review = value
+	}
+	return nil
+}
+
+func (r InstallationReviewSkill) MarshalJSON() ([]byte, error) {
+	type alias InstallationReviewSkill
+	return json.Marshal(struct {
+		Resource InstallationReviewResource `json:"resource"`
+		alias
+	}{
+		Resource: r.Resource(),
+		alias:    alias(r),
+	})
+}
+
+func (r *InstallationConfirmationRequest) UnmarshalJSON(data []byte) error {
+	type rawInstallationConfirmationRequest struct {
+		ConfirmationID    string          `json:"confirmationId"`
+		ExpiresAt         string          `json:"expiresAt"`
+		OperationID       string          `json:"operationId"`
+		PolicySessionID   *string         `json:"policySessionId,omitempty"`
+		Review            json.RawMessage `json:"review"`
+		ReviewFingerprint string          `json:"reviewFingerprint"`
+	}
+	var raw rawInstallationConfirmationRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.ConfirmationID = raw.ConfirmationID
+	r.ExpiresAt = raw.ExpiresAt
+	r.OperationID = raw.OperationID
+	r.PolicySessionID = raw.PolicySessionID
+	if raw.Review != nil {
+		value, err := unmarshalInstallationReview(raw.Review)
+		if err != nil {
+			return err
+		}
+		r.Review = value
+	}
+	r.ReviewFingerprint = raw.ReviewFingerprint
+	return nil
+}
+
+func (r InstalledPluginSource) MarshalJSON() ([]byte, error) {
+	if r.InstalledPluginSourceGitHub != nil {
+		return json.Marshal(r.InstalledPluginSourceGitHub)
+	}
+	if r.InstalledPluginSourceLocal != nil {
+		return json.Marshal(r.InstalledPluginSourceLocal)
+	}
+	if r.InstalledPluginSourceURL != nil {
+		return json.Marshal(r.InstalledPluginSourceURL)
+	}
+	if r.String != nil {
+		return json.Marshal(r.String)
+	}
+	return []byte("null"), nil
+}
+
+func (r *InstalledPluginSource) UnmarshalJSON(data []byte) error {
+	if string(data) == "null" {
+		*r = InstalledPluginSource{}
+		return nil
+	}
+	{
+		var value InstalledPluginSourceGitHub
+		if err := json.Unmarshal(data, &value); err == nil {
+			*r = InstalledPluginSource{InstalledPluginSourceGitHub: &value}
+			return nil
+		}
+	}
+	{
+		var value InstalledPluginSourceLocal
+		if err := json.Unmarshal(data, &value); err == nil {
+			*r = InstalledPluginSource{InstalledPluginSourceLocal: &value}
+			return nil
+		}
+	}
+	{
+		var value InstalledPluginSourceURL
+		if err := json.Unmarshal(data, &value); err == nil {
+			*r = InstalledPluginSource{InstalledPluginSourceURL: &value}
+			return nil
+		}
+	}
+	{
+		var value string
+		if err := json.Unmarshal(data, &value); err == nil {
+			*r = InstalledPluginSource{String: &value}
+			return nil
+		}
+	}
+	return errors.New("data did not match any union variant for InstalledPluginSource")
+}
+
+func matchesMCPSerializableServerConfigMCPServerConfigHTTP(data []byte) bool {
+	var rawGroup0 struct {
+		Command json.RawMessage `json:"command"`
+		URL     json.RawMessage `json:"url"`
+	}
+	if err := json.Unmarshal(data, &rawGroup0); err != nil {
+		return false
+	}
+	if rawGroup0.URL == nil {
+		return false
+	}
+	return rawGroup0.Command == nil
+}
+
+func matchesMCPSerializableServerConfigMCPServerConfigStdio(data []byte) bool {
+	var rawGroup0 struct {
+		Command json.RawMessage `json:"command"`
+		URL     json.RawMessage `json:"url"`
+	}
+	if err := json.Unmarshal(data, &rawGroup0); err != nil {
+		return false
+	}
+	if rawGroup0.Command == nil {
+		return false
+	}
+	return rawGroup0.URL == nil
+}
+
+func unmarshalMCPSerializableServerConfig(data []byte) (MCPSerializableServerConfig, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	if matchesMCPSerializableServerConfigMCPServerConfigHTTP(data) {
+		var d MCPServerConfigHTTP
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	}
+	if matchesMCPSerializableServerConfigMCPServerConfigStdio(data) {
+		var d MCPServerConfigStdio
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	}
+	return &RawMCPSerializableServerConfigData{Raw: data}, nil
+}
+
+func (r RawMCPSerializableServerConfigData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return []byte("null"), nil
+}
+
+func unmarshalMCPServerAuthConfig(data []byte) (MCPServerAuthConfig, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	{
+		var value bool
+		if err := json.Unmarshal(data, &value); err == nil {
+			return MCPServerAuthConfigBoolean(value), nil
+		}
+	}
+	{
+		var value MCPServerAuthConfigRedirectPort
+		if err := json.Unmarshal(data, &value); err == nil {
+			return &value, nil
+		}
+	}
+	return nil, errors.New("data did not match any union variant for MCPServerAuthConfig")
+}
+
+func unmarshalMCPSafeForTelemetry(data []byte) (MCPSafeForTelemetry, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	{
+		var value bool
+		if err := json.Unmarshal(data, &value); err == nil {
+			return MCPSafeForTelemetryBoolean(value), nil
+		}
+	}
+	{
+		var value MCPSafeForTelemetryFields
+		if err := json.Unmarshal(data, &value); err == nil {
+			return &value, nil
+		}
+	}
+	return nil, errors.New("data did not match any union variant for MCPSafeForTelemetry")
+}
+
+func (r *MCPServerConfigHTTP) UnmarshalJSON(data []byte) error {
+	type rawMCPServerConfigHTTP struct {
+		Auth                      json.RawMessage                    `json:"auth,omitempty"`
+		ConfigWarnings            []string                           `json:"configWarnings,omitzero"`
+		DeferTools                *MCPServerConfigDeferTools         `json:"deferTools,omitempty"`
+		DisableSecretMasking      *bool                              `json:"disableSecretMasking,omitempty"`
+		DisableToolCache          *bool                              `json:"disableToolCache,omitempty"`
+		DisplayName               *string                            `json:"displayName,omitempty"`
+		Events                    []string                           `json:"events,omitzero"`
+		ExcludeTools              []string                           `json:"excludeTools,omitzero"`
+		FilterMapping             json.RawMessage                    `json:"filterMapping,omitempty"`
+		Headers                   map[string]string                  `json:"headers,omitzero"`
+		HeadersRefreshTtlMs       *int64                             `json:"headersRefreshTtlMs,omitempty"`
+		IsDefaultServer           *bool                              `json:"isDefaultServer,omitempty"`
+		Notifications             []string                           `json:"notifications,omitzero"`
+		OauthClientID             *string                            `json:"oauthClientId,omitempty"`
+		OauthGrantType            *MCPServerConfigHTTPOauthGrantType `json:"oauthGrantType,omitempty"`
+		OauthPublicClient         *bool                              `json:"oauthPublicClient,omitempty"`
+		OauthScopes               []string                           `json:"oauthScopes,omitzero"`
+		Oidc                      json.RawMessage                    `json:"oidc,omitempty"`
+		SafeForTelemetry          json.RawMessage                    `json:"safeForTelemetry,omitempty"`
+		SlowConnectionThresholdMs *int64                             `json:"slowConnectionThresholdMs,omitempty"`
+		Source                    *MCPServerSource                   `json:"source,omitempty"`
+		SourcePath                *string                            `json:"sourcePath,omitempty"`
+		SourcePlugin              *string                            `json:"sourcePlugin,omitempty"`
+		SourcePluginSpec          *bool                              `json:"sourcePluginSpec,omitempty"`
+		SourcePluginVersion       *string                            `json:"sourcePluginVersion,omitempty"`
+		Timeout                   *int64                             `json:"timeout,omitempty"`
+		Tools                     []string                           `json:"tools,omitzero"`
+		Type                      *MCPServerConfigHTTPType           `json:"type,omitempty"`
+		URL                       string                             `json:"url"`
+	}
+	var raw rawMCPServerConfigHTTP
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Auth != nil {
+		value, err := unmarshalMCPServerAuthConfig(raw.Auth)
+		if err != nil {
+			return err
+		}
+		r.Auth = value
+	}
+	r.ConfigWarnings = raw.ConfigWarnings
+	r.DeferTools = raw.DeferTools
+	r.DisableSecretMasking = raw.DisableSecretMasking
+	r.DisableToolCache = raw.DisableToolCache
+	r.DisplayName = raw.DisplayName
+	r.Events = raw.Events
+	r.ExcludeTools = raw.ExcludeTools
+	if raw.FilterMapping != nil {
+		value, err := unmarshalFilterMapping(raw.FilterMapping)
+		if err != nil {
+			return err
+		}
+		r.FilterMapping = value
+	}
+	r.Headers = raw.Headers
+	r.HeadersRefreshTtlMs = raw.HeadersRefreshTtlMs
+	r.IsDefaultServer = raw.IsDefaultServer
+	r.Notifications = raw.Notifications
+	r.OauthClientID = raw.OauthClientID
+	r.OauthGrantType = raw.OauthGrantType
+	r.OauthPublicClient = raw.OauthPublicClient
+	r.OauthScopes = raw.OauthScopes
+	if raw.Oidc != nil {
+		value, err := unmarshalMCPServerAuthConfig(raw.Oidc)
+		if err != nil {
+			return err
+		}
+		r.Oidc = value
+	}
+	if raw.SafeForTelemetry != nil {
+		value, err := unmarshalMCPSafeForTelemetry(raw.SafeForTelemetry)
+		if err != nil {
+			return err
+		}
+		r.SafeForTelemetry = value
+	}
+	r.SlowConnectionThresholdMs = raw.SlowConnectionThresholdMs
+	r.Source = raw.Source
+	r.SourcePath = raw.SourcePath
+	r.SourcePlugin = raw.SourcePlugin
+	r.SourcePluginSpec = raw.SourcePluginSpec
+	r.SourcePluginVersion = raw.SourcePluginVersion
+	r.Timeout = raw.Timeout
+	r.Tools = raw.Tools
+	r.Type = raw.Type
+	r.URL = raw.URL
+	return nil
+}
+
+func (r *MCPServerConfigStdio) UnmarshalJSON(data []byte) error {
+	type rawMCPServerConfigStdio struct {
+		Args                      []string                   `json:"args,omitzero"`
+		Auth                      json.RawMessage            `json:"auth,omitempty"`
+		Command                   string                     `json:"command"`
+		ConfigWarnings            []string                   `json:"configWarnings,omitzero"`
+		Cwd                       *string                    `json:"cwd,omitempty"`
+		DeferTools                *MCPServerConfigDeferTools `json:"deferTools,omitempty"`
+		DisableSecretMasking      *bool                      `json:"disableSecretMasking,omitempty"`
+		DisableToolCache          *bool                      `json:"disableToolCache,omitempty"`
+		DisplayName               *string                    `json:"displayName,omitempty"`
+		Env                       map[string]string          `json:"env,omitzero"`
+		Events                    []string                   `json:"events,omitzero"`
+		ExcludeTools              []string                   `json:"excludeTools,omitzero"`
+		FilterMapping             json.RawMessage            `json:"filterMapping,omitempty"`
+		IsDefaultServer           *bool                      `json:"isDefaultServer,omitempty"`
+		Notifications             []string                   `json:"notifications,omitzero"`
+		Oidc                      json.RawMessage            `json:"oidc,omitempty"`
+		SafeForTelemetry          json.RawMessage            `json:"safeForTelemetry,omitempty"`
+		SlowConnectionThresholdMs *int64                     `json:"slowConnectionThresholdMs,omitempty"`
+		Source                    *MCPServerSource           `json:"source,omitempty"`
+		SourcePath                *string                    `json:"sourcePath,omitempty"`
+		SourcePlugin              *string                    `json:"sourcePlugin,omitempty"`
+		SourcePluginSpec          *bool                      `json:"sourcePluginSpec,omitempty"`
+		SourcePluginVersion       *string                    `json:"sourcePluginVersion,omitempty"`
+		Timeout                   *int64                     `json:"timeout,omitempty"`
+		Tools                     []string                   `json:"tools,omitzero"`
+		Type                      *MCPServerConfigStdioType  `json:"type,omitempty"`
+	}
+	var raw rawMCPServerConfigStdio
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Args = raw.Args
+	if raw.Auth != nil {
+		value, err := unmarshalMCPServerAuthConfig(raw.Auth)
+		if err != nil {
+			return err
+		}
+		r.Auth = value
+	}
+	r.Command = raw.Command
+	r.ConfigWarnings = raw.ConfigWarnings
+	r.Cwd = raw.Cwd
+	r.DeferTools = raw.DeferTools
+	r.DisableSecretMasking = raw.DisableSecretMasking
+	r.DisableToolCache = raw.DisableToolCache
+	r.DisplayName = raw.DisplayName
+	r.Env = raw.Env
+	r.Events = raw.Events
+	r.ExcludeTools = raw.ExcludeTools
+	if raw.FilterMapping != nil {
+		value, err := unmarshalFilterMapping(raw.FilterMapping)
+		if err != nil {
+			return err
+		}
+		r.FilterMapping = value
+	}
+	r.IsDefaultServer = raw.IsDefaultServer
+	r.Notifications = raw.Notifications
+	if raw.Oidc != nil {
+		value, err := unmarshalMCPServerAuthConfig(raw.Oidc)
+		if err != nil {
+			return err
+		}
+		r.Oidc = value
+	}
+	if raw.SafeForTelemetry != nil {
+		value, err := unmarshalMCPSafeForTelemetry(raw.SafeForTelemetry)
+		if err != nil {
+			return err
+		}
+		r.SafeForTelemetry = value
+	}
+	r.SlowConnectionThresholdMs = raw.SlowConnectionThresholdMs
+	r.Source = raw.Source
+	r.SourcePath = raw.SourcePath
+	r.SourcePlugin = raw.SourcePlugin
+	r.SourcePluginSpec = raw.SourcePluginSpec
+	r.SourcePluginVersion = raw.SourcePluginVersion
+	r.Timeout = raw.Timeout
+	r.Tools = raw.Tools
+	r.Type = raw.Type
+	return nil
+}
+
+func (r *MCPConfigAddRequest) UnmarshalJSON(data []byte) error {
+	type rawMCPConfigAddRequest struct {
+		Config json.RawMessage `json:"config"`
+		Name   string          `json:"name"`
+	}
+	var raw rawMCPConfigAddRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Config != nil {
+		value, err := unmarshalMCPSerializableServerConfig(raw.Config)
+		if err != nil {
+			return err
+		}
+		r.Config = value
+	}
+	r.Name = raw.Name
+	return nil
+}
+
+func (r *MCPConfigList) UnmarshalJSON(data []byte) error {
+	type rawMCPConfigList struct {
+		Servers map[string]json.RawMessage `json:"servers"`
+	}
+	var raw rawMCPConfigList
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Servers != nil {
+		r.Servers = make(map[string]MCPSerializableServerConfig, len(raw.Servers))
+		for key, rawValue := range raw.Servers {
+			value, err := unmarshalMCPSerializableServerConfig(rawValue)
+			if err != nil {
+				return err
+			}
+			r.Servers[key] = value
+		}
+	}
+	return nil
+}
+
+func (r *MCPConfigUpdateRequest) UnmarshalJSON(data []byte) error {
+	type rawMCPConfigUpdateRequest struct {
+		Config json.RawMessage `json:"config"`
+		Name   string          `json:"name"`
+	}
+	var raw rawMCPConfigUpdateRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Config != nil {
+		value, err := unmarshalMCPSerializableServerConfig(raw.Config)
+		if err != nil {
+			return err
+		}
+		r.Config = value
+	}
+	r.Name = raw.Name
+	return nil
+}
+
+func unmarshalMCPHeadersHandlePendingHeadersRefreshRequest(data []byte) (MCPHeadersHandlePendingHeadersRefreshRequest, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case MCPHeadersHandlePendingHeadersRefreshRequestKindError:
+		var d MCPHeadersHandlePendingHeadersRefreshRequestError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPHeadersHandlePendingHeadersRefreshRequestKindHeaders:
+		var d MCPHeadersHandlePendingHeadersRefreshRequestHeaders
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPHeadersHandlePendingHeadersRefreshRequestKindNone:
+		var d MCPHeadersHandlePendingHeadersRefreshRequestNone
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawMCPHeadersHandlePendingHeadersRefreshRequestData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawMCPHeadersHandlePendingHeadersRefreshRequestData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r MCPHeadersHandlePendingHeadersRefreshRequestError) MarshalJSON() ([]byte, error) {
+	type alias MCPHeadersHandlePendingHeadersRefreshRequestError
+	return json.Marshal(struct {
+		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPHeadersHandlePendingHeadersRefreshRequestHeaders) MarshalJSON() ([]byte, error) {
+	type alias MCPHeadersHandlePendingHeadersRefreshRequestHeaders
+	return json.Marshal(struct {
+		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPHeadersHandlePendingHeadersRefreshRequestNone) MarshalJSON() ([]byte, error) {
+	type alias MCPHeadersHandlePendingHeadersRefreshRequestNone
+	return json.Marshal(struct {
+		Kind MCPHeadersHandlePendingHeadersRefreshRequestKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *MCPHeadersHandlePendingHeadersRefreshRequestRequest) UnmarshalJSON(data []byte) error {
+	type rawMCPHeadersHandlePendingHeadersRefreshRequestRequest struct {
+		RequestID string          `json:"requestId"`
+		Result    json.RawMessage `json:"result"`
+	}
+	var raw rawMCPHeadersHandlePendingHeadersRefreshRequestRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.RequestID = raw.RequestID
+	if raw.Result != nil {
+		value, err := unmarshalMCPHeadersHandlePendingHeadersRefreshRequest(raw.Result)
+		if err != nil {
+			return err
+		}
+		r.Result = value
+	}
+	return nil
+}
+
+func unmarshalMCPInstallationManagementOutcome(data []byte) (MCPInstallationManagementOutcome, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case MCPInstallationManagementOutcomeKindInstallPrepared:
+		var d MCPInstallationManagementOutcomeInstallPrepared
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementOutcomeKindListed:
+		var d MCPInstallationManagementOutcomeListed
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementOutcomeKindOperation:
+		var d MCPInstallationManagementOutcomeOperation
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementOutcomeKindRecovered:
+		var d MCPInstallationManagementOutcomeRecovered
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementOutcomeKindRecoveryRequired:
+		var d MCPInstallationManagementOutcomeRecoveryRequired
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementOutcomeKindRefused:
+		var d MCPInstallationManagementOutcomeRefused
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementOutcomeKindUninstallPlanned:
+		var d MCPInstallationManagementOutcomeUninstallPlanned
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawMCPInstallationManagementOutcomeData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawMCPInstallationManagementOutcomeData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r MCPInstallationManagementOutcomeInstallPrepared) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementOutcomeInstallPrepared
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationManagementOutcomeListed) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementOutcomeListed
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalMCPInstallationOperationStatus(data []byte) (MCPInstallationOperationStatus, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Phase {
+	case MCPInstallationOperationStatusPhaseApplying:
+		var d MCPInstallationOperationStatusApplying
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOperationStatusPhaseAwaitingConfirmation:
+		var d MCPInstallationOperationStatusAwaitingConfirmation
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOperationStatusPhaseCompleted:
+		var d MCPInstallationOperationStatusCompleted
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOperationStatusPhasePrepared:
+		var d MCPInstallationOperationStatusPrepared
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOperationStatusPhasePreparing:
+		var d MCPInstallationOperationStatusPreparing
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOperationStatusPhaseRevalidating:
+		var d MCPInstallationOperationStatusRevalidating
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawMCPInstallationOperationStatusData{Discriminator: raw.Phase, Raw: data}, nil
+	}
+}
+
+func (r RawMCPInstallationOperationStatusData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+	}{
+		Phase: r.Discriminator,
+	})
+}
+
+func (r MCPInstallationOperationStatusApplying) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOperationStatusApplying
+	return json.Marshal(struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOperationStatusAwaitingConfirmation) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOperationStatusAwaitingConfirmation
+	return json.Marshal(struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalMCPInstallationOutcome(data []byte) (MCPInstallationOutcome, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case MCPInstallationOutcomeKindCancelled:
+		var d MCPInstallationOutcomeCancelled
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOutcomeKindDeclined:
+		var d MCPInstallationOutcomeDeclined
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOutcomeKindInstalled:
+		var d MCPInstallationOutcomeInstalled
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOutcomeKindRecoveryRequired:
+		var d MCPInstallationOutcomeRecoveryRequired
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOutcomeKindRefused:
+		var d MCPInstallationOutcomeRefused
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOutcomeKindRolledBack:
+		var d MCPInstallationOutcomeRolledBack
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationOutcomeKindUninstalled:
+		var d MCPInstallationOutcomeUninstalled
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawMCPInstallationOutcomeData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawMCPInstallationOutcomeData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r MCPInstallationOutcomeCancelled) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOutcomeCancelled
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOutcomeDeclined) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOutcomeDeclined
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOutcomeInstalled) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOutcomeInstalled
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOutcomeRecoveryRequired) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOutcomeRecoveryRequired
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOutcomeRefused) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOutcomeRefused
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOutcomeRolledBack) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOutcomeRolledBack
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOutcomeUninstalled) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOutcomeUninstalled
+	return json.Marshal(struct {
+		Kind MCPInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *MCPInstallationOperationStatusCompleted) UnmarshalJSON(data []byte) error {
+	type rawMCPInstallationOperationStatusCompleted struct {
+		CancellationRequested bool            `json:"cancellationRequested"`
+		OperationID           string          `json:"operationId"`
+		Outcome               json.RawMessage `json:"outcome"`
+	}
+	var raw rawMCPInstallationOperationStatusCompleted
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.CancellationRequested = raw.CancellationRequested
+	r.OperationID = raw.OperationID
+	if raw.Outcome != nil {
+		value, err := unmarshalMCPInstallationOutcome(raw.Outcome)
+		if err != nil {
+			return err
+		}
+		r.Outcome = value
+	}
+	return nil
+}
+
+func (r MCPInstallationOperationStatusCompleted) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOperationStatusCompleted
+	return json.Marshal(struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOperationStatusPrepared) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOperationStatusPrepared
+	return json.Marshal(struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOperationStatusPreparing) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOperationStatusPreparing
+	return json.Marshal(struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationOperationStatusRevalidating) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationOperationStatusRevalidating
+	return json.Marshal(struct {
+		Phase MCPInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r *MCPInstallationManagementOutcomeOperation) UnmarshalJSON(data []byte) error {
+	type rawMCPInstallationManagementOutcomeOperation struct {
+		Operation json.RawMessage `json:"operation"`
+	}
+	var raw rawMCPInstallationManagementOutcomeOperation
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Operation != nil {
+		value, err := unmarshalMCPInstallationOperationStatus(raw.Operation)
+		if err != nil {
+			return err
+		}
+		r.Operation = value
+	}
+	return nil
+}
+
+func (r MCPInstallationManagementOutcomeOperation) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementOutcomeOperation
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationManagementOutcomeRecovered) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementOutcomeRecovered
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationManagementOutcomeRecoveryRequired) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementOutcomeRecoveryRequired
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationManagementOutcomeRefused) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementOutcomeRefused
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r MCPInstallationManagementOutcomeUninstallPlanned) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementOutcomeUninstallPlanned
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalMCPInstallationManagementResult(data []byte) (MCPInstallationManagementResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind MCPInstallationManagementResultKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case MCPInstallationManagementResultKindInvalidRequest:
+		var d CatalogInvalidRequestError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementResultKindNegotiationRefused:
+		var d CatalogNegotiationRefusedError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationManagementResultKindOutcome:
+		var d MCPInstallationManagementResultOutcome
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawMCPInstallationManagementResultData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawMCPInstallationManagementResultData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementResultKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r *MCPInstallationManagementResultOutcome) UnmarshalJSON(data []byte) error {
+	type rawMCPInstallationManagementResultOutcome struct {
+		Negotiated CatalogNegotiatedContract `json:"negotiated"`
+		Outcome    json.RawMessage           `json:"outcome"`
+	}
+	var raw rawMCPInstallationManagementResultOutcome
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Negotiated = raw.Negotiated
+	if raw.Outcome != nil {
+		value, err := unmarshalMCPInstallationManagementOutcome(raw.Outcome)
+		if err != nil {
+			return err
+		}
+		r.Outcome = value
+	}
+	return nil
+}
+
+func (r MCPInstallationManagementResultOutcome) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationManagementResultOutcome
+	return json.Marshal(struct {
+		Kind MCPInstallationManagementResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.mcpInstallationManagementResultKind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalMCPInstallationResult(data []byte) (MCPInstallationResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind MCPInstallationResultKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case MCPInstallationResultKindInvalidRequest:
+		var d CatalogInvalidRequestError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationResultKindNegotiationRefused:
+		var d CatalogNegotiationRefusedError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case MCPInstallationResultKindOutcome:
+		var d MCPInstallationResultOutcome
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawMCPInstallationResultData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawMCPInstallationResultData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind MCPInstallationResultKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r *MCPInstallationResultOutcome) UnmarshalJSON(data []byte) error {
+	type rawMCPInstallationResultOutcome struct {
+		Negotiated CatalogNegotiatedContract `json:"negotiated"`
+		Outcome    json.RawMessage           `json:"outcome"`
+	}
+	var raw rawMCPInstallationResultOutcome
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Negotiated = raw.Negotiated
+	if raw.Outcome != nil {
+		value, err := unmarshalMCPInstallationOutcome(raw.Outcome)
+		if err != nil {
+			return err
+		}
+		r.Outcome = value
+	}
+	return nil
+}
+
+func (r MCPInstallationResultOutcome) MarshalJSON() ([]byte, error) {
+	type alias MCPInstallationResultOutcome
+	return json.Marshal(struct {
+		Kind MCPInstallationResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.mcpInstallationResultKind(),
+		alias: alias(r),
 	})
 }
 
@@ -3347,15 +5081,17 @@ func (r MCPPlanInstallSourceCard) MarshalJSON() ([]byte, error) {
 
 func (r *MCPPlanInstallRequest) UnmarshalJSON(data []byte) error {
 	type rawMCPPlanInstallRequest struct {
-		Contract CatalogClientContract `json:"contract"`
-		Scope    *MCPPlanScope         `json:"scope,omitempty"`
-		Source   json.RawMessage       `json:"source"`
+		Contract        CatalogClientContract `json:"contract"`
+		PolicySessionID *string               `json:"policySessionId,omitempty"`
+		Scope           *MCPPlanScope         `json:"scope,omitempty"`
+		Source          json.RawMessage       `json:"source"`
 	}
 	var raw rawMCPPlanInstallRequest
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	r.Contract = raw.Contract
+	r.PolicySessionID = raw.PolicySessionID
 	r.Scope = raw.Scope
 	if raw.Source != nil {
 		value, err := unmarshalMCPPlanInstallSource(raw.Source)
@@ -3518,6 +5254,38 @@ func (r MCPPlanInstallPlanned) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (r *MCPPrepareInstallRequest) UnmarshalJSON(data []byte) error {
+	type rawMCPPrepareInstallRequest struct {
+		ChoiceID        string                       `json:"choiceId"`
+		Contract        CatalogClientContract        `json:"contract"`
+		Inputs          []MCPInstallationInput       `json:"inputs"`
+		PlanHandle      string                       `json:"planHandle"`
+		PolicySessionID string                       `json:"policySessionId"`
+		Secrets         []MCPInstallationSecret      `json:"secrets"`
+		SecretStorage   MCPInstallationSecretStorage `json:"secretStorage"`
+		Source          json.RawMessage              `json:"source"`
+	}
+	var raw rawMCPPrepareInstallRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.ChoiceID = raw.ChoiceID
+	r.Contract = raw.Contract
+	r.Inputs = raw.Inputs
+	r.PlanHandle = raw.PlanHandle
+	r.PolicySessionID = raw.PolicySessionID
+	r.Secrets = raw.Secrets
+	r.SecretStorage = raw.SecretStorage
+	if raw.Source != nil {
+		value, err := unmarshalMCPServerCardReference(raw.Source)
+		if err != nil {
+			return err
+		}
+		r.Source = value
+	}
+	return nil
+}
+
 func matchesMCPServerConfigHTTP(data []byte) bool {
 	var rawGroup0 struct {
 		Command        json.RawMessage `json:"command"`
@@ -3630,27 +5398,28 @@ func (r RawMCPServerConfigData) MarshalJSON() ([]byte, error) {
 
 func (r *MCPServerConfigMemory) UnmarshalJSON(data []byte) error {
 	type rawMCPServerConfigMemory struct {
-		ConfigWarnings       []string                   `json:"configWarnings,omitzero"`
-		DeferTools           *MCPServerConfigDeferTools `json:"deferTools,omitempty"`
-		DisableSecretMasking *bool                      `json:"disableSecretMasking,omitempty"`
-		DisableToolCache     *bool                      `json:"disableToolCache,omitempty"`
-		DisplayName          *string                    `json:"displayName,omitempty"`
-		Events               []string                   `json:"events,omitzero"`
-		ExcludeTools         []string                   `json:"excludeTools,omitzero"`
-		FilterMapping        json.RawMessage            `json:"filterMapping,omitempty"`
-		IsDefaultServer      *bool                      `json:"isDefaultServer,omitempty"`
-		Notifications        []string                   `json:"notifications,omitzero"`
-		Oidc                 json.RawMessage            `json:"oidc,omitempty"`
-		SafeForTelemetry     json.RawMessage            `json:"safeForTelemetry,omitempty"`
-		ServerInstance       any                        `json:"serverInstance"`
-		Source               *MCPServerSource           `json:"source,omitempty"`
-		SourcePath           *string                    `json:"sourcePath,omitempty"`
-		SourcePlugin         *string                    `json:"sourcePlugin,omitempty"`
-		SourcePluginSpec     *bool                      `json:"sourcePluginSpec,omitempty"`
-		SourcePluginVersion  *string                    `json:"sourcePluginVersion,omitempty"`
-		Timeout              *int64                     `json:"timeout,omitempty"`
-		Tools                []string                   `json:"tools,omitzero"`
-		Type                 MCPServerConfigMemoryType  `json:"type"`
+		ConfigWarnings            []string                   `json:"configWarnings,omitzero"`
+		DeferTools                *MCPServerConfigDeferTools `json:"deferTools,omitempty"`
+		DisableSecretMasking      *bool                      `json:"disableSecretMasking,omitempty"`
+		DisableToolCache          *bool                      `json:"disableToolCache,omitempty"`
+		DisplayName               *string                    `json:"displayName,omitempty"`
+		Events                    []string                   `json:"events,omitzero"`
+		ExcludeTools              []string                   `json:"excludeTools,omitzero"`
+		FilterMapping             json.RawMessage            `json:"filterMapping,omitempty"`
+		IsDefaultServer           *bool                      `json:"isDefaultServer,omitempty"`
+		Notifications             []string                   `json:"notifications,omitzero"`
+		Oidc                      json.RawMessage            `json:"oidc,omitempty"`
+		SafeForTelemetry          json.RawMessage            `json:"safeForTelemetry,omitempty"`
+		ServerInstance            any                        `json:"serverInstance"`
+		SlowConnectionThresholdMs *int64                     `json:"slowConnectionThresholdMs,omitempty"`
+		Source                    *MCPServerSource           `json:"source,omitempty"`
+		SourcePath                *string                    `json:"sourcePath,omitempty"`
+		SourcePlugin              *string                    `json:"sourcePlugin,omitempty"`
+		SourcePluginSpec          *bool                      `json:"sourcePluginSpec,omitempty"`
+		SourcePluginVersion       *string                    `json:"sourcePluginVersion,omitempty"`
+		Timeout                   *int64                     `json:"timeout,omitempty"`
+		Tools                     []string                   `json:"tools,omitzero"`
+		Type                      MCPServerConfigMemoryType  `json:"type"`
 	}
 	var raw rawMCPServerConfigMemory
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -3687,6 +5456,7 @@ func (r *MCPServerConfigMemory) UnmarshalJSON(data []byte) error {
 		r.SafeForTelemetry = value
 	}
 	r.ServerInstance = raw.ServerInstance
+	r.SlowConnectionThresholdMs = raw.SlowConnectionThresholdMs
 	r.Source = raw.Source
 	r.SourcePath = raw.SourcePath
 	r.SourcePlugin = raw.SourcePlugin
@@ -3745,8 +5515,9 @@ func (r *MCPReloadConfig) UnmarshalJSON(data []byte) error {
 
 func (r *MCPRestartServerRequest) UnmarshalJSON(data []byte) error {
 	type rawMCPRestartServerRequest struct {
-		Config     json.RawMessage `json:"config,omitempty"`
-		ServerName string          `json:"serverName"`
+		Config                 json.RawMessage `json:"config,omitempty"`
+		ExpectedInstallationID *string         `json:"expectedInstallationId,omitempty"`
+		ServerName             string          `json:"serverName"`
 	}
 	var raw rawMCPRestartServerRequest
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -3759,14 +5530,16 @@ func (r *MCPRestartServerRequest) UnmarshalJSON(data []byte) error {
 		}
 		r.Config = value
 	}
+	r.ExpectedInstallationID = raw.ExpectedInstallationID
 	r.ServerName = raw.ServerName
 	return nil
 }
 
 func (r *MCPStartServerRequest) UnmarshalJSON(data []byte) error {
 	type rawMCPStartServerRequest struct {
-		Config     json.RawMessage `json:"config,omitempty"`
-		ServerName string          `json:"serverName"`
+		Config                 json.RawMessage `json:"config,omitempty"`
+		ExpectedInstallationID *string         `json:"expectedInstallationId,omitempty"`
+		ServerName             string          `json:"serverName"`
 	}
 	var raw rawMCPStartServerRequest
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -3779,6 +5552,7 @@ func (r *MCPStartServerRequest) UnmarshalJSON(data []byte) error {
 		}
 		r.Config = value
 	}
+	r.ExpectedInstallationID = raw.ExpectedInstallationID
 	r.ServerName = raw.ServerName
 	return nil
 }
@@ -3816,6 +5590,12 @@ func unmarshalPermissionDecision(data []byte) (PermissionDecision, error) {
 		return &d, nil
 	case PermissionDecisionKindApprovePermanently:
 		var d PermissionDecisionApprovePermanently
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case PermissionDecisionKindApproveReadOnlyForSession:
+		var d PermissionDecisionApproveReadOnlyForSession
 		if err := json.Unmarshal(data, &d); err != nil {
 			return nil, err
 		}
@@ -3956,12 +5736,6 @@ func unmarshalUserToolSessionApproval(data []byte) (UserToolSessionApproval, err
 			return nil, err
 		}
 		return &d, nil
-	case UserToolSessionApprovalKindFactory:
-		var d UserToolSessionApprovalFactory
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
 	case UserToolSessionApprovalKindMCP:
 		var d UserToolSessionApprovalMCP
 		if err := json.Unmarshal(data, &d); err != nil {
@@ -3976,6 +5750,12 @@ func unmarshalUserToolSessionApproval(data []byte) (UserToolSessionApproval, err
 		return &d, nil
 	case UserToolSessionApprovalKindRead:
 		var d UserToolSessionApprovalRead
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case UserToolSessionApprovalKindWorkflow:
+		var d UserToolSessionApprovalWorkflow
 		if err := json.Unmarshal(data, &d); err != nil {
 			return nil, err
 		}
@@ -4057,17 +5837,6 @@ func (r UserToolSessionApprovalExtensionPermissionAccess) MarshalJSON() ([]byte,
 	})
 }
 
-func (r UserToolSessionApprovalFactory) MarshalJSON() ([]byte, error) {
-	type alias UserToolSessionApprovalFactory
-	return json.Marshal(struct {
-		Kind UserToolSessionApprovalKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
 func (r UserToolSessionApprovalMCP) MarshalJSON() ([]byte, error) {
 	type alias UserToolSessionApprovalMCP
 	return json.Marshal(struct {
@@ -4092,6 +5861,17 @@ func (r UserToolSessionApprovalMemory) MarshalJSON() ([]byte, error) {
 
 func (r UserToolSessionApprovalRead) MarshalJSON() ([]byte, error) {
 	type alias UserToolSessionApprovalRead
+	return json.Marshal(struct {
+		Kind UserToolSessionApprovalKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r UserToolSessionApprovalWorkflow) MarshalJSON() ([]byte, error) {
+	type alias UserToolSessionApprovalWorkflow
 	return json.Marshal(struct {
 		Kind UserToolSessionApprovalKind `json:"kind"`
 		alias
@@ -4215,12 +5995,6 @@ func unmarshalPermissionDecisionApproveForLocationApproval(data []byte) (Permiss
 			return nil, err
 		}
 		return &d, nil
-	case PermissionDecisionApproveForLocationApprovalKindFactory:
-		var d PermissionDecisionApproveForLocationApprovalFactory
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
 	case PermissionDecisionApproveForLocationApprovalKindMCP:
 		var d PermissionDecisionApproveForLocationApprovalMCP
 		if err := json.Unmarshal(data, &d); err != nil {
@@ -4241,6 +6015,12 @@ func unmarshalPermissionDecisionApproveForLocationApproval(data []byte) (Permiss
 		return &d, nil
 	case PermissionDecisionApproveForLocationApprovalKindRead:
 		var d PermissionDecisionApproveForLocationApprovalRead
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case PermissionDecisionApproveForLocationApprovalKindWorkflow:
+		var d PermissionDecisionApproveForLocationApprovalWorkflow
 		if err := json.Unmarshal(data, &d); err != nil {
 			return nil, err
 		}
@@ -4322,17 +6102,6 @@ func (r PermissionDecisionApproveForLocationApprovalExtensionPermissionAccess) M
 	})
 }
 
-func (r PermissionDecisionApproveForLocationApprovalFactory) MarshalJSON() ([]byte, error) {
-	type alias PermissionDecisionApproveForLocationApprovalFactory
-	return json.Marshal(struct {
-		Kind PermissionDecisionApproveForLocationApprovalKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
 func (r PermissionDecisionApproveForLocationApprovalMCP) MarshalJSON() ([]byte, error) {
 	type alias PermissionDecisionApproveForLocationApprovalMCP
 	return json.Marshal(struct {
@@ -4368,6 +6137,17 @@ func (r PermissionDecisionApproveForLocationApprovalMemory) MarshalJSON() ([]byt
 
 func (r PermissionDecisionApproveForLocationApprovalRead) MarshalJSON() ([]byte, error) {
 	type alias PermissionDecisionApproveForLocationApprovalRead
+	return json.Marshal(struct {
+		Kind PermissionDecisionApproveForLocationApprovalKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r PermissionDecisionApproveForLocationApprovalWorkflow) MarshalJSON() ([]byte, error) {
+	type alias PermissionDecisionApproveForLocationApprovalWorkflow
 	return json.Marshal(struct {
 		Kind PermissionDecisionApproveForLocationApprovalKind `json:"kind"`
 		alias
@@ -4462,12 +6242,6 @@ func unmarshalPermissionDecisionApproveForSessionApproval(data []byte) (Permissi
 			return nil, err
 		}
 		return &d, nil
-	case PermissionDecisionApproveForSessionApprovalKindFactory:
-		var d PermissionDecisionApproveForSessionApprovalFactory
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
 	case PermissionDecisionApproveForSessionApprovalKindMCP:
 		var d PermissionDecisionApproveForSessionApprovalMCP
 		if err := json.Unmarshal(data, &d); err != nil {
@@ -4488,6 +6262,12 @@ func unmarshalPermissionDecisionApproveForSessionApproval(data []byte) (Permissi
 		return &d, nil
 	case PermissionDecisionApproveForSessionApprovalKindRead:
 		var d PermissionDecisionApproveForSessionApprovalRead
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case PermissionDecisionApproveForSessionApprovalKindWorkflow:
+		var d PermissionDecisionApproveForSessionApprovalWorkflow
 		if err := json.Unmarshal(data, &d); err != nil {
 			return nil, err
 		}
@@ -4569,17 +6349,6 @@ func (r PermissionDecisionApproveForSessionApprovalExtensionPermissionAccess) Ma
 	})
 }
 
-func (r PermissionDecisionApproveForSessionApprovalFactory) MarshalJSON() ([]byte, error) {
-	type alias PermissionDecisionApproveForSessionApprovalFactory
-	return json.Marshal(struct {
-		Kind PermissionDecisionApproveForSessionApprovalKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
 func (r PermissionDecisionApproveForSessionApprovalMCP) MarshalJSON() ([]byte, error) {
 	type alias PermissionDecisionApproveForSessionApprovalMCP
 	return json.Marshal(struct {
@@ -4615,6 +6384,17 @@ func (r PermissionDecisionApproveForSessionApprovalMemory) MarshalJSON() ([]byte
 
 func (r PermissionDecisionApproveForSessionApprovalRead) MarshalJSON() ([]byte, error) {
 	type alias PermissionDecisionApproveForSessionApprovalRead
+	return json.Marshal(struct {
+		Kind PermissionDecisionApproveForSessionApprovalKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r PermissionDecisionApproveForSessionApprovalWorkflow) MarshalJSON() ([]byte, error) {
+	type alias PermissionDecisionApproveForSessionApprovalWorkflow
 	return json.Marshal(struct {
 		Kind PermissionDecisionApproveForSessionApprovalKind `json:"kind"`
 		alias
@@ -4679,6 +6459,17 @@ func (r PermissionDecisionApproveOnce) MarshalJSON() ([]byte, error) {
 
 func (r PermissionDecisionApprovePermanently) MarshalJSON() ([]byte, error) {
 	type alias PermissionDecisionApprovePermanently
+	return json.Marshal(struct {
+		Kind PermissionDecisionKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r PermissionDecisionApproveReadOnlyForSession) MarshalJSON() ([]byte, error) {
+	type alias PermissionDecisionApproveReadOnlyForSession
 	return json.Marshal(struct {
 		Kind PermissionDecisionKind `json:"kind"`
 		alias
@@ -4841,12 +6632,6 @@ func unmarshalPermissionsLocationsAddToolApprovalDetails(data []byte) (Permissio
 			return nil, err
 		}
 		return &d, nil
-	case PermissionsLocationsAddToolApprovalDetailsKindFactory:
-		var d PermissionsLocationsAddToolApprovalDetailsFactory
-		if err := json.Unmarshal(data, &d); err != nil {
-			return nil, err
-		}
-		return &d, nil
 	case PermissionsLocationsAddToolApprovalDetailsKindMCP:
 		var d PermissionsLocationsAddToolApprovalDetailsMCP
 		if err := json.Unmarshal(data, &d); err != nil {
@@ -4867,6 +6652,12 @@ func unmarshalPermissionsLocationsAddToolApprovalDetails(data []byte) (Permissio
 		return &d, nil
 	case PermissionsLocationsAddToolApprovalDetailsKindRead:
 		var d PermissionsLocationsAddToolApprovalDetailsRead
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case PermissionsLocationsAddToolApprovalDetailsKindWorkflow:
+		var d PermissionsLocationsAddToolApprovalDetailsWorkflow
 		if err := json.Unmarshal(data, &d); err != nil {
 			return nil, err
 		}
@@ -4948,17 +6739,6 @@ func (r PermissionsLocationsAddToolApprovalDetailsExtensionPermissionAccess) Mar
 	})
 }
 
-func (r PermissionsLocationsAddToolApprovalDetailsFactory) MarshalJSON() ([]byte, error) {
-	type alias PermissionsLocationsAddToolApprovalDetailsFactory
-	return json.Marshal(struct {
-		Kind PermissionsLocationsAddToolApprovalDetailsKind `json:"kind"`
-		alias
-	}{
-		Kind:  r.Kind(),
-		alias: alias(r),
-	})
-}
-
 func (r PermissionsLocationsAddToolApprovalDetailsMCP) MarshalJSON() ([]byte, error) {
 	type alias PermissionsLocationsAddToolApprovalDetailsMCP
 	return json.Marshal(struct {
@@ -4994,6 +6774,17 @@ func (r PermissionsLocationsAddToolApprovalDetailsMemory) MarshalJSON() ([]byte,
 
 func (r PermissionsLocationsAddToolApprovalDetailsRead) MarshalJSON() ([]byte, error) {
 	type alias PermissionsLocationsAddToolApprovalDetailsRead
+	return json.Marshal(struct {
+		Kind PermissionsLocationsAddToolApprovalDetailsKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r PermissionsLocationsAddToolApprovalDetailsWorkflow) MarshalJSON() ([]byte, error) {
+	type alias PermissionsLocationsAddToolApprovalDetailsWorkflow
 	return json.Marshal(struct {
 		Kind PermissionsLocationsAddToolApprovalDetailsKind `json:"kind"`
 		alias
@@ -5411,6 +7202,37 @@ func (r PushAttachmentSelection) MarshalJSON() ([]byte, error) {
 		Type:  r.Type(),
 		alias: alias(r),
 	})
+}
+
+func (r *QueueAppendSteeringRequest) UnmarshalJSON(data []byte) error {
+	type rawQueueAppendSteeringRequest struct {
+		AgentMode      SendAgentMode     `json:"agentMode"`
+		Attachments    []json.RawMessage `json:"attachments"`
+		DisplayPrompt  string            `json:"displayPrompt"`
+		ExpectedPrompt string            `json:"expectedPrompt"`
+		MessageID      string            `json:"messageId"`
+		Prompt         string            `json:"prompt"`
+	}
+	var raw rawQueueAppendSteeringRequest
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.AgentMode = raw.AgentMode
+	if raw.Attachments != nil {
+		r.Attachments = make([]Attachment, 0, len(raw.Attachments))
+		for _, rawItem := range raw.Attachments {
+			value, err := unmarshalAttachment(rawItem)
+			if err != nil {
+				return err
+			}
+			r.Attachments = append(r.Attachments, value)
+		}
+	}
+	r.DisplayPrompt = raw.DisplayPrompt
+	r.ExpectedPrompt = raw.ExpectedPrompt
+	r.MessageID = raw.MessageID
+	r.Prompt = raw.Prompt
+	return nil
 }
 
 func (r *QueueInsertMessage) UnmarshalJSON(data []byte) error {
@@ -5978,6 +7800,7 @@ func (r *SessionOpenOptions) UnmarshalJSON(data []byte) error {
 		ExpAssignments                         any                                                  `json:"expAssignments,omitempty"`
 		FeatureFlags                           map[string]bool                                      `json:"featureFlags,omitzero"`
 		HasSkillProvider                       *bool                                                `json:"hasSkillProvider,omitempty"`
+		IgnoredSkillsLocations                 []string                                             `json:"ignoredSkillsLocations,omitzero"`
 		IncludedBuiltinAgents                  []string                                             `json:"includedBuiltinAgents,omitzero"`
 		IncludedBuiltinSkills                  []string                                             `json:"includedBuiltinSkills,omitzero"`
 		InstalledPlugins                       []InstalledPlugin                                    `json:"installedPlugins,omitzero"`
@@ -6063,6 +7886,7 @@ func (r *SessionOpenOptions) UnmarshalJSON(data []byte) error {
 	r.ExpAssignments = raw.ExpAssignments
 	r.FeatureFlags = raw.FeatureFlags
 	r.HasSkillProvider = raw.HasSkillProvider
+	r.IgnoredSkillsLocations = raw.IgnoredSkillsLocations
 	r.IncludedBuiltinAgents = raw.IncludedBuiltinAgents
 	r.IncludedBuiltinSkills = raw.IncludedBuiltinSkills
 	r.InstalledPlugins = raw.InstalledPlugins
@@ -6464,6 +8288,713 @@ func (r *SessionSetCredentialsParams) UnmarshalJSON(data []byte) error {
 		r.Credentials = value
 	}
 	return nil
+}
+
+func unmarshalSkillInstallationManagementOutcome(data []byte) (SkillInstallationManagementOutcome, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case SkillInstallationManagementOutcomeKindEnabledChanged:
+		var d SkillInstallationManagementOutcomeEnabledChanged
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindInstallPlanned:
+		var d SkillInstallationManagementOutcomeInstallPlanned
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindListed:
+		var d SkillInstallationManagementOutcomeListed
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindOperation:
+		var d SkillInstallationManagementOutcomeOperation
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindRecovered:
+		var d SkillInstallationManagementOutcomeRecovered
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindRecoveryRequired:
+		var d SkillInstallationManagementOutcomeRecoveryRequired
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindRefused:
+		var d SkillInstallationManagementOutcomeRefused
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindRolledBack:
+		var d SkillInstallationManagementOutcomeRolledBack
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementOutcomeKindUninstallPlanned:
+		var d SkillInstallationManagementOutcomeUninstallPlanned
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawSkillInstallationManagementOutcomeData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawSkillInstallationManagementOutcomeData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r SkillInstallationManagementOutcomeEnabledChanged) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeEnabledChanged
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *SkillInstallPlan) UnmarshalJSON(data []byte) error {
+	type rawSkillInstallPlan struct {
+		ExpiresAt   string          `json:"expiresAt"`
+		OperationID string          `json:"operationId"`
+		PlanHandle  string          `json:"planHandle"`
+		Review      json.RawMessage `json:"review"`
+	}
+	var raw rawSkillInstallPlan
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.ExpiresAt = raw.ExpiresAt
+	r.OperationID = raw.OperationID
+	r.PlanHandle = raw.PlanHandle
+	if raw.Review != nil {
+		value, err := unmarshalSkillInstallationReview(raw.Review)
+		if err != nil {
+			return err
+		}
+		r.Review = value
+	}
+	return nil
+}
+
+func (r SkillInstallationManagementOutcomeInstallPlanned) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeInstallPlanned
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationManagementOutcomeListed) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeListed
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalSkillInstallationOperationStatus(data []byte) (SkillInstallationOperationStatus, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Phase {
+	case SkillInstallationOperationStatusPhaseApplying:
+		var d SkillInstallationOperationStatusApplying
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOperationStatusPhaseAwaitingConfirmation:
+		var d SkillInstallationOperationStatusAwaitingConfirmation
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOperationStatusPhaseCompleted:
+		var d SkillInstallationOperationStatusCompleted
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOperationStatusPhasePrepared:
+		var d SkillInstallationOperationStatusPrepared
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOperationStatusPhasePreparing:
+		var d SkillInstallationOperationStatusPreparing
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOperationStatusPhaseRevalidating:
+		var d SkillInstallationOperationStatusRevalidating
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawSkillInstallationOperationStatusData{Discriminator: raw.Phase, Raw: data}, nil
+	}
+}
+
+func (r RawSkillInstallationOperationStatusData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+	}{
+		Phase: r.Discriminator,
+	})
+}
+
+func (r SkillInstallationOperationStatusApplying) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOperationStatusApplying
+	return json.Marshal(struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOperationStatusAwaitingConfirmation) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOperationStatusAwaitingConfirmation
+	return json.Marshal(struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalSkillInstallationOutcome(data []byte) (SkillInstallationOutcome, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case SkillInstallationOutcomeKindCancelled:
+		var d SkillInstallationOutcomeCancelled
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOutcomeKindDeclined:
+		var d SkillInstallationOutcomeDeclined
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOutcomeKindInstalled:
+		var d SkillInstallationOutcomeInstalled
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOutcomeKindRecoveryRequired:
+		var d SkillInstallationOutcomeRecoveryRequired
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOutcomeKindRefused:
+		var d SkillInstallationOutcomeRefused
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOutcomeKindRolledBack:
+		var d SkillInstallationOutcomeRolledBack
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationOutcomeKindUninstalled:
+		var d SkillInstallationOutcomeUninstalled
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawSkillInstallationOutcomeData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawSkillInstallationOutcomeData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r SkillInstallationOutcomeCancelled) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOutcomeCancelled
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOutcomeDeclined) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOutcomeDeclined
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOutcomeInstalled) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOutcomeInstalled
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOutcomeRecoveryRequired) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOutcomeRecoveryRequired
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOutcomeRefused) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOutcomeRefused
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOutcomeRolledBack) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOutcomeRolledBack
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOutcomeUninstalled) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOutcomeUninstalled
+	return json.Marshal(struct {
+		Kind SkillInstallationOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *SkillInstallationOperationStatusCompleted) UnmarshalJSON(data []byte) error {
+	type rawSkillInstallationOperationStatusCompleted struct {
+		CancellationRequested bool            `json:"cancellationRequested"`
+		OperationID           string          `json:"operationId"`
+		Outcome               json.RawMessage `json:"outcome"`
+	}
+	var raw rawSkillInstallationOperationStatusCompleted
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.CancellationRequested = raw.CancellationRequested
+	r.OperationID = raw.OperationID
+	if raw.Outcome != nil {
+		value, err := unmarshalSkillInstallationOutcome(raw.Outcome)
+		if err != nil {
+			return err
+		}
+		r.Outcome = value
+	}
+	return nil
+}
+
+func (r SkillInstallationOperationStatusCompleted) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOperationStatusCompleted
+	return json.Marshal(struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOperationStatusPrepared) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOperationStatusPrepared
+	return json.Marshal(struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOperationStatusPreparing) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOperationStatusPreparing
+	return json.Marshal(struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationOperationStatusRevalidating) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationOperationStatusRevalidating
+	return json.Marshal(struct {
+		Phase SkillInstallationOperationStatusPhase `json:"phase"`
+		alias
+	}{
+		Phase: r.Phase(),
+		alias: alias(r),
+	})
+}
+
+func (r *SkillInstallationManagementOutcomeOperation) UnmarshalJSON(data []byte) error {
+	type rawSkillInstallationManagementOutcomeOperation struct {
+		Operation json.RawMessage `json:"operation"`
+	}
+	var raw rawSkillInstallationManagementOutcomeOperation
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if raw.Operation != nil {
+		value, err := unmarshalSkillInstallationOperationStatus(raw.Operation)
+		if err != nil {
+			return err
+		}
+		r.Operation = value
+	}
+	return nil
+}
+
+func (r SkillInstallationManagementOutcomeOperation) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeOperation
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationManagementOutcomeRecovered) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeRecovered
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationManagementOutcomeRecoveryRequired) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeRecoveryRequired
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationManagementOutcomeRefused) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeRefused
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r SkillInstallationManagementOutcomeRolledBack) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeRolledBack
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func (r *SkillUninstallPlan) UnmarshalJSON(data []byte) error {
+	type rawSkillUninstallPlan struct {
+		ExpiresAt    string                   `json:"expiresAt"`
+		Installation SkillInstallationSummary `json:"installation"`
+		OperationID  string                   `json:"operationId"`
+		PlanHandle   string                   `json:"planHandle"`
+		Review       json.RawMessage          `json:"review"`
+	}
+	var raw rawSkillUninstallPlan
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.ExpiresAt = raw.ExpiresAt
+	r.Installation = raw.Installation
+	r.OperationID = raw.OperationID
+	r.PlanHandle = raw.PlanHandle
+	if raw.Review != nil {
+		value, err := unmarshalSkillInstallationReview(raw.Review)
+		if err != nil {
+			return err
+		}
+		r.Review = value
+	}
+	return nil
+}
+
+func (r SkillInstallationManagementOutcomeUninstallPlanned) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementOutcomeUninstallPlanned
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementOutcomeKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.Kind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalSkillInstallationManagementResult(data []byte) (SkillInstallationManagementResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind SkillInstallationManagementResultKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case SkillInstallationManagementResultKindInvalidRequest:
+		var d CatalogInvalidRequestError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementResultKindNegotiationRefused:
+		var d CatalogNegotiationRefusedError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationManagementResultKindOutcome:
+		var d SkillInstallationManagementResultOutcome
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawSkillInstallationManagementResultData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawSkillInstallationManagementResultData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementResultKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r *SkillInstallationManagementResultOutcome) UnmarshalJSON(data []byte) error {
+	type rawSkillInstallationManagementResultOutcome struct {
+		Negotiated CatalogNegotiatedContract `json:"negotiated"`
+		Outcome    json.RawMessage           `json:"outcome"`
+	}
+	var raw rawSkillInstallationManagementResultOutcome
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Negotiated = raw.Negotiated
+	if raw.Outcome != nil {
+		value, err := unmarshalSkillInstallationManagementOutcome(raw.Outcome)
+		if err != nil {
+			return err
+		}
+		r.Outcome = value
+	}
+	return nil
+}
+
+func (r SkillInstallationManagementResultOutcome) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationManagementResultOutcome
+	return json.Marshal(struct {
+		Kind SkillInstallationManagementResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.skillInstallationManagementResultKind(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalSkillInstallationResult(data []byte) (SkillInstallationResult, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Kind SkillInstallationResultKind `json:"kind"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Kind {
+	case SkillInstallationResultKindInvalidRequest:
+		var d CatalogInvalidRequestError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationResultKindNegotiationRefused:
+		var d CatalogNegotiationRefusedError
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case SkillInstallationResultKindOutcome:
+		var d SkillInstallationResultOutcome
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawSkillInstallationResultData{Discriminator: raw.Kind, Raw: data}, nil
+	}
+}
+
+func (r RawSkillInstallationResultData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Kind SkillInstallationResultKind `json:"kind"`
+	}{
+		Kind: r.Discriminator,
+	})
+}
+
+func (r *SkillInstallationResultOutcome) UnmarshalJSON(data []byte) error {
+	type rawSkillInstallationResultOutcome struct {
+		Negotiated CatalogNegotiatedContract `json:"negotiated"`
+		Outcome    json.RawMessage           `json:"outcome"`
+	}
+	var raw rawSkillInstallationResultOutcome
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Negotiated = raw.Negotiated
+	if raw.Outcome != nil {
+		value, err := unmarshalSkillInstallationOutcome(raw.Outcome)
+		if err != nil {
+			return err
+		}
+		r.Outcome = value
+	}
+	return nil
+}
+
+func (r SkillInstallationResultOutcome) MarshalJSON() ([]byte, error) {
+	type alias SkillInstallationResultOutcome
+	return json.Marshal(struct {
+		Kind SkillInstallationResultKind `json:"kind"`
+		alias
+	}{
+		Kind:  r.skillInstallationResultKind(),
+		alias: alias(r),
+	})
 }
 
 func unmarshalSlashCommandInvocationResult(data []byte) (SlashCommandInvocationResult, error) {
@@ -6985,6 +9516,34 @@ func (r *TasksUpdateRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (r *Tool) UnmarshalJSON(data []byte) error {
+	type rawTool struct {
+		Description      string          `json:"description"`
+		Instructions     *string         `json:"instructions,omitempty"`
+		Name             string          `json:"name"`
+		NamespacedName   *string         `json:"namespacedName,omitempty"`
+		Parameters       map[string]any  `json:"parameters,omitzero"`
+		SafeForTelemetry json.RawMessage `json:"safeForTelemetry,omitempty"`
+	}
+	var raw rawTool
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Description = raw.Description
+	r.Instructions = raw.Instructions
+	r.Name = raw.Name
+	r.NamespacedName = raw.NamespacedName
+	r.Parameters = raw.Parameters
+	if raw.SafeForTelemetry != nil {
+		value, err := unmarshalBuiltinToolSafeForTelemetry(raw.SafeForTelemetry)
+		if err != nil {
+			return err
+		}
+		r.SafeForTelemetry = value
+	}
+	return nil
+}
+
 func (r *ToolResultExpanded) UnmarshalJSON(data []byte) error {
 	type rawToolResultExpanded struct {
 		BinaryResultsForLlm              []ExternalToolTextResultForLlmBinaryResultsForLlm `json:"binaryResultsForLlm,omitzero"`
@@ -7403,5 +9962,254 @@ func (r *UIElicitationResponse) UnmarshalJSON(data []byte) error {
 		}
 	}
 	r.Meta = raw.Meta
+	return nil
+}
+
+func unmarshalWorkflowRunFailure(data []byte) (WorkflowRunFailure, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Type WorkflowRunFailureType `json:"type"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Type {
+	case WorkflowRunFailureTypeWorkflowAccountingIncomplete:
+		var d WorkflowRunFailureWorkflowAccountingIncomplete
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case WorkflowRunFailureTypeWorkflowDurableFailure:
+		var d WorkflowRunFailureWorkflowDurableFailure
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case WorkflowRunFailureTypeWorkflowLimitReached:
+		var d WorkflowRunFailureWorkflowLimitReached
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case WorkflowRunFailureTypeWorkflowProviderDisconnected:
+		var d WorkflowRunFailureWorkflowProviderDisconnected
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case WorkflowRunFailureTypeWorkflowResumeDeclined:
+		var d WorkflowRunFailureWorkflowResumeDeclined
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawWorkflowRunFailureData{Discriminator: raw.Type, Raw: data}, nil
+	}
+}
+
+func (r RawWorkflowRunFailureData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Type WorkflowRunFailureType `json:"type"`
+	}{
+		Type: r.Discriminator,
+	})
+}
+
+func (r WorkflowRunFailureWorkflowAccountingIncomplete) MarshalJSON() ([]byte, error) {
+	type alias WorkflowRunFailureWorkflowAccountingIncomplete
+	return json.Marshal(struct {
+		Type WorkflowRunFailureType `json:"type"`
+		alias
+	}{
+		Type:  r.Type(),
+		alias: alias(r),
+	})
+}
+
+func (r WorkflowRunFailureWorkflowDurableFailure) MarshalJSON() ([]byte, error) {
+	type alias WorkflowRunFailureWorkflowDurableFailure
+	return json.Marshal(struct {
+		Type WorkflowRunFailureType `json:"type"`
+		alias
+	}{
+		Type:  r.Type(),
+		alias: alias(r),
+	})
+}
+
+func (r WorkflowRunFailureWorkflowLimitReached) MarshalJSON() ([]byte, error) {
+	type alias WorkflowRunFailureWorkflowLimitReached
+	return json.Marshal(struct {
+		Type WorkflowRunFailureType `json:"type"`
+		alias
+	}{
+		Type:  r.Type(),
+		alias: alias(r),
+	})
+}
+
+func (r WorkflowRunFailureWorkflowProviderDisconnected) MarshalJSON() ([]byte, error) {
+	type alias WorkflowRunFailureWorkflowProviderDisconnected
+	return json.Marshal(struct {
+		Type WorkflowRunFailureType `json:"type"`
+		alias
+	}{
+		Type:  r.Type(),
+		alias: alias(r),
+	})
+}
+
+func (r WorkflowRunFailureWorkflowResumeDeclined) MarshalJSON() ([]byte, error) {
+	type alias WorkflowRunFailureWorkflowResumeDeclined
+	return json.Marshal(struct {
+		Type WorkflowRunFailureType `json:"type"`
+		alias
+	}{
+		Type:  r.Type(),
+		alias: alias(r),
+	})
+}
+
+func unmarshalWorkflowPauseInfo(data []byte) (WorkflowPauseInfo, error) {
+	if string(data) == "null" {
+		return nil, nil
+	}
+	type rawUnion struct {
+		Type WorkflowPauseInfoType `json:"type"`
+	}
+	var raw rawUnion
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	switch raw.Type {
+	case WorkflowPauseInfoTypeCheckpoint:
+		var d WorkflowPauseInfoCheckpoint
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	case WorkflowPauseInfoTypeUser:
+		var d WorkflowPauseInfoUser
+		if err := json.Unmarshal(data, &d); err != nil {
+			return nil, err
+		}
+		return &d, nil
+	default:
+		return &RawWorkflowPauseInfoData{Discriminator: raw.Type, Raw: data}, nil
+	}
+}
+
+func (r RawWorkflowPauseInfoData) MarshalJSON() ([]byte, error) {
+	if r.Raw != nil {
+		return r.Raw, nil
+	}
+	return json.Marshal(struct {
+		Type WorkflowPauseInfoType `json:"type"`
+	}{
+		Type: r.Discriminator,
+	})
+}
+
+func (r WorkflowPauseInfoCheckpoint) MarshalJSON() ([]byte, error) {
+	type alias WorkflowPauseInfoCheckpoint
+	return json.Marshal(struct {
+		Type WorkflowPauseInfoType `json:"type"`
+		alias
+	}{
+		Type:  r.Type(),
+		alias: alias(r),
+	})
+}
+
+func (r WorkflowPauseInfoUser) MarshalJSON() ([]byte, error) {
+	type alias WorkflowPauseInfoUser
+	return json.Marshal(struct {
+		Type WorkflowPauseInfoType `json:"type"`
+		alias
+	}{
+		Type:  r.Type(),
+		alias: alias(r),
+	})
+}
+
+func (r *WorkflowRunTerminal) UnmarshalJSON(data []byte) error {
+	type rawWorkflowRunTerminal struct {
+		Error         *string         `json:"error,omitempty"`
+		Failure       json.RawMessage `json:"failure,omitempty"`
+		PauseInfo     json.RawMessage `json:"pauseInfo"`
+		Reason        *string         `json:"reason,omitempty"`
+		ResultPreview *string         `json:"resultPreview,omitempty"`
+	}
+	var raw rawWorkflowRunTerminal
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Error = raw.Error
+	if raw.Failure != nil {
+		value, err := unmarshalWorkflowRunFailure(raw.Failure)
+		if err != nil {
+			return err
+		}
+		r.Failure = value
+	}
+	if raw.PauseInfo != nil {
+		value, err := unmarshalWorkflowPauseInfo(raw.PauseInfo)
+		if err != nil {
+			return err
+		}
+		r.PauseInfo = value
+	}
+	r.Reason = raw.Reason
+	r.ResultPreview = raw.ResultPreview
+	return nil
+}
+
+func (r *WorkflowRunResult) UnmarshalJSON(data []byte) error {
+	type rawWorkflowRunResult struct {
+		Attempt   *int64            `json:"attempt,omitempty"`
+		Error     *string           `json:"error,omitempty"`
+		Failure   json.RawMessage   `json:"failure,omitempty"`
+		PauseInfo json.RawMessage   `json:"pauseInfo,omitempty"`
+		Reason    *string           `json:"reason,omitempty"`
+		Result    any               `json:"result,omitempty"`
+		RunID     string            `json:"runId"`
+		Snapshot  any               `json:"snapshot,omitempty"`
+		Status    WorkflowRunStatus `json:"status"`
+	}
+	var raw rawWorkflowRunResult
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	r.Attempt = raw.Attempt
+	r.Error = raw.Error
+	if raw.Failure != nil {
+		value, err := unmarshalWorkflowRunFailure(raw.Failure)
+		if err != nil {
+			return err
+		}
+		r.Failure = value
+	}
+	if raw.PauseInfo != nil {
+		value, err := unmarshalWorkflowPauseInfo(raw.PauseInfo)
+		if err != nil {
+			return err
+		}
+		r.PauseInfo = value
+	}
+	r.Reason = raw.Reason
+	r.Result = raw.Result
+	r.RunID = raw.RunID
+	r.Snapshot = raw.Snapshot
+	r.Status = raw.Status
 	return nil
 }

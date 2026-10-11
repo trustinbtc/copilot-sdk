@@ -22,12 +22,28 @@ public enum CatalogCapability {
     LEGACY_MCP_SERVER_CARD("legacy-mcp-server-card"),
     /** The {@code ai-skill-discovery} variant. */
     AI_SKILL_DISCOVERY("ai-skill-discovery"),
+    /** The {@code agent-plugin-discovery} variant. */
+    AGENT_PLUGIN_DISCOVERY("agent-plugin-discovery"),
     /** The {@code mcp-install-planning} variant. */
     MCP_INSTALL_PLANNING("mcp-install-planning"),
     /** The {@code multiple-transport-choice} variant. */
     MULTIPLE_TRANSPORT_CHOICE("multiple-transport-choice"),
+    /** The {@code catalog-search-pagination} variant. */
+    CATALOG_SEARCH_PAGINATION("catalog-search-pagination"),
     /** The {@code trust-snapshot} variant. */
-    TRUST_SNAPSHOT("trust-snapshot");
+    TRUST_SNAPSHOT("trust-snapshot"),
+    /** The {@code catalog-selection} variant. */
+    CATALOG_SELECTION("catalog-selection"),
+    /** The {@code catalog-search-credential-required} variant. */
+    CATALOG_SEARCH_CREDENTIAL_REQUIRED("catalog-search-credential-required"),
+    /** The {@code catalog-search-session-bound} variant. */
+    CATALOG_SEARCH_SESSION_BOUND("catalog-search-session-bound"),
+    /** The {@code mcp-confirmed-remote-installation} variant. */
+    MCP_CONFIRMED_REMOTE_INSTALLATION("mcp-confirmed-remote-installation"),
+    /** The {@code mcp-configured-remote-installation} variant. */
+    MCP_CONFIGURED_REMOTE_INSTALLATION("mcp-configured-remote-installation"),
+    /** The {@code skill-confirmed-installation} variant. */
+    SKILL_CONFIRMED_INSTALLATION("skill-confirmed-installation");
 
     private final String value;
     CatalogCapability(String value) { this.value = value; }

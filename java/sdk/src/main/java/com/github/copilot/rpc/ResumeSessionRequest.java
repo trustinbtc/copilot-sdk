@@ -12,6 +12,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import com.github.copilot.CopilotExperimental;
+import com.github.copilot.generated.rpc.DiagnosticsConfiguration;
 import com.github.copilot.generated.rpc.SessionLimitsConfig;
 
 /**
@@ -37,6 +38,9 @@ public final class ResumeSessionRequest {
 
     @JsonProperty("model")
     private String model;
+
+    @JsonProperty("continuePendingWork")
+    private Boolean continuePendingWork;
 
     @JsonProperty("reasoningEffort")
     private String reasoningEffort;
@@ -162,6 +166,9 @@ public final class ResumeSessionRequest {
     @JsonProperty("mcpOAuthTokenStorage")
     private String mcpOAuthTokenStorage;
 
+    @JsonProperty("diagnostics")
+    private DiagnosticsConfiguration diagnostics;
+
     @JsonProperty("authClientIdMetadataUrl")
     private String authClientIdMetadataUrl;
 
@@ -283,6 +290,30 @@ public final class ResumeSessionRequest {
     /** Sets the model name. @param model the model */
     public void setModel(String model) {
         this.model = model;
+    }
+
+    /**
+     * Gets the pending-work continuation choice.
+     *
+     * @return the choice, or {@code null} if omitted
+     */
+    public Boolean getContinuePendingWork() {
+        return continuePendingWork;
+    }
+
+    /**
+     * Sets the pending-work continuation choice.
+     *
+     * @param continuePendingWork
+     *            the choice
+     */
+    public void setContinuePendingWork(boolean continuePendingWork) {
+        this.continuePendingWork = continuePendingWork;
+    }
+
+    /** Restores the runtime's default pending-work continuation behavior. */
+    public void clearContinuePendingWork() {
+        continuePendingWork = null;
     }
 
     /** Gets the reasoning effort. @return the reasoning effort level */
@@ -823,6 +854,19 @@ public final class ResumeSessionRequest {
     /** Gets MCP OAuth token storage mode. @return the storage mode */
     public String getMcpOAuthTokenStorage() {
         return mcpOAuthTokenStorage;
+    }
+
+    /**
+     * Gets the diagnostics configuration. @return the level, or {@code null} when
+     * unset
+     */
+    public DiagnosticsConfiguration getDiagnostics() {
+        return diagnostics;
+    }
+
+    /** Sets the diagnostics configuration. @param diagnostics the level */
+    public void setDiagnostics(DiagnosticsConfiguration diagnostics) {
+        this.diagnostics = diagnostics;
     }
 
     /**

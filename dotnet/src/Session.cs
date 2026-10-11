@@ -75,7 +75,7 @@ public sealed partial class CopilotSession : IAsyncDisposable
     private volatile Func<AutoModeSwitchRequest, AutoModeSwitchInvocation, Task<AutoModeSwitchResponse>>? _autoModeSwitchHandler;
     private ImmutableArray<EventSubscription> _eventHandlers = ImmutableArray<EventSubscription>.Empty;
 
-    private sealed record EventSubscription(Type EventType, Action<SessionEvent> Handler);
+    private sealed record EventSubscription(Type EventType, Action<SessionEvent> Handler, bool RootAgentOnly);
 
     private SessionHooks? _hooks;
     private readonly SemaphoreSlim _hooksLock = new(1, 1);
@@ -289,7 +289,8 @@ public sealed partial class CopilotSession : IAsyncDisposable
     /// </summary>
     /// <param name="options">Options for the message to be sent, including the prompt and optional attachments.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> that can be used to cancel the operation.</param>
-    /// <returns>A task that resolves with the ID of the response message, which can be used to correlate events.</returns>
+    /// <returns>The submitted user message's ID, not an assistant response ID. When this send starts
+    /// a run, root assistant messages carry it as <c>OriginatingMessageId</c>.</returns>
     /// <exception cref="InvalidOperationException">Thrown if the session has been disposed.</exception>
     /// <remarks>
     /// <para>
@@ -331,6 +332,15 @@ public sealed partial class CopilotSession : IAsyncDisposable
             Traceparent = traceparent,
             Tracestate = tracestate,
             RequestHeaders = options.RequestHeaders,
+            ResponseFormat = options.ResponseSchema is { } schema ? new ResponseFormatJsonSchema
+            {
+                JsonSchema = new JsonSchemaResponseFormat
+                {
+                    Name = "response",
+                    Schema = schema,
+                    Strict = true,
+                },
+            } : null,
         };
 
         var rpcTimestamp = Stopwatch.GetTimestamp();
@@ -363,6 +373,8 @@ public sealed partial class CopilotSession : IAsyncDisposable
     /// </para>
     /// <para>
     /// Events are still delivered to handlers registered via <see cref="On{T}"/> while waiting.
+    /// Sub-agent events with a non-empty AgentId do not complete the wait or supply its reply.
+    /// Synchronous handlers registered before this call process the terminal event before the wait completes.
     /// </para>
     /// </remarks>
     /// <example>
@@ -379,6 +391,11 @@ public sealed partial class CopilotSession : IAsyncDisposable
     {
         ArgumentNullException.ThrowIfNull(options);
         ThrowIfDisposed();
+
+        if (options.ResponseSchema is not null)
+        {
+            return await SendAndWaitForStructuredMessageAsync(options, timeout, cancellationToken);
+        }
 
         var totalTimestamp = Stopwatch.GetTimestamp();
         var effectiveTimeout = timeout ?? TimeSpan.FromSeconds(60);
@@ -417,7 +434,7 @@ public sealed partial class CopilotSession : IAsyncDisposable
             }
         }
 
-        using var subscription = On<SessionEvent>(Handler);
+        using var subscription = OnCore<SessionEvent>(Handler, rootAgentOnly: true);
 
         await SendAsync(options, cancellationToken);
 
@@ -501,11 +518,14 @@ public sealed partial class CopilotSession : IAsyncDisposable
     /// </code>
     /// </example>
     public IDisposable On<T>(Action<T> handler) where T : SessionEvent
+        => OnCore(handler, rootAgentOnly: false);
+
+    private ActionDisposable OnCore<T>(Action<T> handler, bool rootAgentOnly) where T : SessionEvent
     {
         ArgumentNullException.ThrowIfNull(handler);
         ThrowIfDisposed();
 
-        var subscription = new EventSubscription(typeof(T), evt => handler((T)evt));
+        var subscription = new EventSubscription(typeof(T), evt => handler((T)evt), rootAgentOnly);
         ImmutableInterlocked.Update(ref _eventHandlers, array => array.Add(subscription));
         return new ActionDisposable(() => ImmutableInterlocked.Update(ref _eventHandlers, array => array.Remove(subscription)));
     }
@@ -545,9 +565,12 @@ public sealed partial class CopilotSession : IAsyncDisposable
         {
             var dispatchTimestamp = Stopwatch.GetTimestamp();
             var eventType = sessionEvent.GetType();
+            // Preserve wire attribution without moving waiters ahead of earlier user handlers.
+            var isRootAgentEvent = string.IsNullOrEmpty(sessionEvent.AgentId);
             foreach (var subscription in _eventHandlers)
             {
-                if (!subscription.EventType.IsAssignableFrom(eventType))
+                if (!subscription.EventType.IsAssignableFrom(eventType) ||
+                    (subscription.RootAgentOnly && !isRootAgentEvent))
                 {
                     continue;
                 }
@@ -2275,6 +2298,7 @@ public sealed partial class CopilotSession : IAsyncDisposable
         public string? Traceparent { get; init; }
         public string? Tracestate { get; init; }
         public IDictionary<string, string>? RequestHeaders { get; init; }
+        public ResponseFormat? ResponseFormat { get; init; }
     }
 
     internal record SendMessageResponse

@@ -9,10 +9,18 @@
  */
 
 export { CopilotClient } from "./client.js";
+export type { HostLocalServerOptions, HostGitHubEnvironmentOptions } from "./generated/rpc.js";
+export {
+    AhpHost,
+    type AhpHostExit,
+    type AhpHostOptions,
+    type AhpSessionCreateRequest,
+    type AhpSessionResumeRequest,
+} from "./host.js";
 export { DisableBypassPermissionsModes, RuntimeConnection } from "./types.js";
 export { BuiltInTools, ToolSet } from "./toolSet.js";
 export { CopilotSession, type AssistantMessageEvent } from "./session.js";
-export { defineFactory, FactoryResumeError, isFactoryRunTerminal } from "./factory.js";
+export { defineWorkflow, WorkflowResumeError, isWorkflowRunTerminal } from "./workflow.js";
 export {
     Canvas,
     CanvasError,
@@ -47,7 +55,7 @@ export {
 // `PermissionRequest` (re-exported below from `./types.js`),
 // `PermissionRequestedData`/`PermissionRequestedEvent` (also re-exported below
 // from `./types.js`), `AssistantMessageEvent` (re-exported above from
-// `./session.js`), and `JsonValue` (re-exported below from `./factory.js`).
+// `./session.js`), and `JsonValue` (re-exported below from `./workflow.js`).
 // Per the ECMAScript module spec, the explicit named re-exports
 // shadow the names arriving via `export type *`, so the hand-authored public API
 // surface for those six identifiers is preserved unchanged.
@@ -60,6 +68,20 @@ export type {
     CanvasProviderIdentity,
     CloudSessionOptions,
     CloudSessionRepository,
+    ConnectorAccountRequest,
+    ConnectorAvailability,
+    ConnectorCapabilities,
+    ConnectorCatalogEntry,
+    ConnectorCatalogResult,
+    ConnectorCatalogStatus,
+    ConnectorConnectRequest,
+    ConnectorConnectResult,
+    ConnectorContinueRequest,
+    ConnectorDisconnectResult,
+    ConnectorMcpStatus,
+    ConnectorReconcileRequest,
+    ConnectorRuntimeStatus,
+    ConnectorStatus,
     AutoModeSwitchHandler,
     AutoModeSwitchRequest,
     AutoModeSwitchResponse,
@@ -72,6 +94,12 @@ export type {
     CopilotClientInfo,
     CopilotClientMode,
     CopilotClientOptions,
+    InstallationConfirmationHandler,
+    InstallationConfirmationRequest,
+    InstallationConfirmationResponse,
+    InstallationDecision,
+    InstallationReview,
+    McpInstallationReview,
     CopilotExpAssignmentResponse,
     StdioRuntimeConnection,
     InProcessRuntimeConnection,
@@ -91,6 +119,10 @@ export type {
     ExitPlanModeHandler,
     ExitPlanModeRequest,
     ExitPlanModeResult,
+    ExtensionLaunchProfile,
+    ExtensionLaunchProvider,
+    ExtensionLaunchProviderResolveRequest,
+    ExtensionLaunchProviderResolveResult,
     ExtensionInfo,
     ForegroundSessionInfo,
     GetAuthStatusResponse,
@@ -108,14 +140,14 @@ export type {
     LargeToolOutputConfig,
     MemoryConfiguration,
     UiInputOptions,
-    FactoryLimits,
-    FactoryMeta,
     MCPStdioServerConfig,
     MCPHTTPServerConfig,
     MCPServerConfig,
     DefaultAgentConfig,
     BearerTokenProvider,
+    ExtensionContextAttachment,
     MessageOptions,
+    ResponseSchema,
     MessageSource,
     ManagedSettings,
     ManagedSettingsPermissions,
@@ -147,6 +179,7 @@ export type {
     ProviderModelConfig,
     ProviderTokenArgs,
     RemoteSessionMode,
+    SandboxConfigSource,
     ResumeSessionConfig,
     SectionOverride,
     SectionOverrideAction,
@@ -201,28 +234,30 @@ export type {
     ZodSchema,
 } from "./types.js";
 export type {
-    RunOptions,
-    ResumeOptions,
-    FactoryLimitOverrides,
-    FactoryResumeErrorCode,
-    SessionFactoryApi,
-    FactoryAgentOptions,
-    FactoryContext,
-    FactoryDefinition,
-    FactoryHandle,
-    FactoryJsonSchema,
     JsonValue,
-    FactoryPipelineStage,
-    FactoryStepOptions,
-    FactoryRunResult,
-    FactoryRunStatus,
-    FactoryRunSummary,
-    FactoryListRunsOptions,
-    FactoryRunsPage,
-    FactoryRunDetail,
-    FactoryProgressPage,
-    FactoryProgressLine,
-    FactoryPhaseObservation,
-    FactoryPhaseStatus,
-    FactoryAgentSummary,
-} from "./factory.js";
+    WorkflowRunOptions,
+    WorkflowResumeOptions,
+    WorkflowLimitOverrides,
+    WorkflowResumeErrorCode,
+    SessionWorkflowApi,
+    WorkflowAgentOptions,
+    WorkflowContext,
+    WorkflowDefinition,
+    WorkflowHandle,
+    WorkflowJsonSchema,
+    WorkflowLimits,
+    WorkflowMeta,
+    WorkflowPipelineStage,
+    WorkflowStepOptions,
+    WorkflowRunResult,
+    WorkflowRunStatus,
+    WorkflowRunSummary,
+    WorkflowListRunsOptions,
+    WorkflowRunsPage,
+    WorkflowRunDetail,
+    WorkflowProgressPage,
+    WorkflowProgressLine,
+    WorkflowPhaseObservation,
+    WorkflowPhaseStatus,
+    WorkflowAgentSummary,
+} from "./workflow.js";

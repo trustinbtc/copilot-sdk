@@ -59,6 +59,7 @@ import {
     type RpcMethod,
     type SessionEventEnvelopeProperty,
 } from "./utils.js";
+import { readLegacyParameters } from "./legacy-parameters.js";
 
 // ── Utilities ───────────────────────────────────────────────────────────────
 
@@ -146,7 +147,8 @@ function placeholderToQuicktypeIdentifiers(placeholder: string): string[] {
 export function postProcessExternalRefsForPython(
     code: string,
     placeholderToReal: Map<string, string>,
-    externalEnumNames: Set<string> = new Set()
+    externalEnumNames: Set<string> = new Set(),
+    externalDiscriminatedUnionNames: Set<string> = new Set()
 ): string {
     for (const [placeholder, realName] of placeholderToReal) {
         const markerProperty = `__externalRefMarker_${placeholder}`;
@@ -182,10 +184,47 @@ export function postProcessExternalRefsForPython(
                 new RegExp(`to_class\\(${realName},\\s*([^)]+)\\)`, "g"),
                 `to_enum(${realName}, $1)`
             );
+        } else if (externalDiscriminatedUnionNames.has(realName)) {
+            code = code.replace(new RegExp(`\\b${realName}\\.from_dict\\b`, "g"), `_load_${realName}`);
         }
     }
 
     return code.replace(/\n{3,}/g, "\n\n");
+}
+
+function collectPythonExternalDiscriminatedUnionNames(
+    schema: JSONSchema7 | undefined,
+    placeholderToReal: Map<string, string>
+): Set<string> {
+    const unionNames = new Set<string>();
+    if (!schema) return unionNames;
+
+    const definitions = collectDefinitionCollections(schema as Record<string, unknown>);
+    for (const realName of placeholderToReal.values()) {
+        // SessionEvent is emitted as a wrapper class with its own from_dict dispatcher,
+        // not as a union alias with a _load_* helper.
+        if (realName === "SessionEvent") continue;
+        const definition = definitions.definitions[realName] ?? definitions.$defs[realName];
+        if (!definition) continue;
+
+        const variants = definition.anyOf ?? definition.oneOf;
+        if (!Array.isArray(variants) || variants.length < 2) continue;
+        const resolvedVariants = variants.map((variant) =>
+            typeof variant === "object" && variant !== null
+                ? resolveObjectSchema(variant, definitions) ??
+                  resolveSchema(variant, definitions) ??
+                  variant
+                : undefined
+        );
+        if (
+            resolvedVariants.every((variant) => variant?.properties !== undefined) &&
+            findPyDiscriminator(resolvedVariants as JSONSchema7[])
+        ) {
+            unionNames.add(realName);
+        }
+    }
+
+    return unionNames;
 }
 
 function collectPythonExternalEnumNames(
@@ -227,6 +266,25 @@ function preservePythonSessionEventConstructorOrder(schema: JSONSchema7): void {
             const resolvedPath = (read as JSONSchema7).properties?.resolvedPath;
             if (resolvedPath && typeof resolvedPath === "object") {
                 (resolvedPath as Record<string, unknown>)["x-copilot-sdk-append-last"] = true;
+            }
+        }
+
+        // Added after these constructors were published; sorting it with the
+        // other optional fields would shift `tool_call_id` and `warning` for
+        // positional callers.
+        for (const name of [
+            "PermissionPromptRequestCommands",
+            "PermissionRequestRead",
+            "PermissionRequestShell",
+            "PermissionRequestWrite",
+        ]) {
+            const definition = definitions[name];
+            const sandboxPathGrant =
+                definition && typeof definition === "object"
+                    ? (definition as JSONSchema7).properties?.sandboxPathGrant
+                    : undefined;
+            if (sandboxPathGrant && typeof sandboxPathGrant === "object") {
+                (sandboxPathGrant as Record<string, unknown>)["x-copilot-sdk-append-last"] = true;
             }
         }
     }
@@ -420,30 +478,8 @@ function postProcessRefBasedDiscriminatedUnionsForPython(
     for (const match of code.matchAll(/^class (\w+)[:\(]/gm)) {
         emittedClassNames.add(match[1]);
     }
-    const acronymCandidates = (name: string): string[] => {
-        const substitutions: Array<[RegExp, string]> = [
-            [/Api/g, "API"],
-            [/Mcp/g, "MCP"],
-            [/Url/g, "URL"],
-            [/Json/g, "JSON"],
-            [/Http/g, "HTTP"],
-            [/Hmac/g, "HMAC"],
-            [/Tcp/g, "TCP"],
-            [/Sql/g, "SQL"],
-            [/Id\b/g, "ID"],
-            [/Llm/g, "LLM"],
-            [/Cli/g, "CLI"],
-        ];
-        const results = new Set<string>([name]);
-        for (const [pattern, replacement] of substitutions) {
-            for (const existing of [...results]) {
-                results.add(existing.replace(pattern, replacement));
-            }
-        }
-        return [...results];
-    };
     const resolveActualName = (expected: string): string | undefined => {
-        for (const candidate of acronymCandidates(expected)) {
+        for (const candidate of pythonAcronymCandidates(expected)) {
             if (emittedClassNames.has(candidate)) return candidate;
         }
         return undefined;
@@ -1385,6 +1421,106 @@ function removeShadowedSessionEventEnumsForPython(
         .replace(/\n{3,}/g, "\n\n");
 }
 
+/** Quicktype applies acronym casing to class names; list every spelling it may emit. */
+function pythonAcronymCandidates(name: string): string[] {
+    const substitutions: Array<[RegExp, string]> = [
+        [/Api/g, "API"],
+        [/Mcp/g, "MCP"],
+        [/Url/g, "URL"],
+        [/Json/g, "JSON"],
+        [/Http/g, "HTTP"],
+        [/Hmac/g, "HMAC"],
+        [/Tcp/g, "TCP"],
+        [/Sql/g, "SQL"],
+        [/Id\b/g, "ID"],
+        [/Llm/g, "LLM"],
+        [/Cli/g, "CLI"],
+    ];
+    const results = new Set<string>([name]);
+    for (const [pattern, replacement] of substitutions) {
+        for (const existing of [...results]) {
+            results.add(existing.replace(pattern, replacement));
+        }
+    }
+    return [...results];
+}
+
+/**
+ * Applies `x-legacy-parameters` to generated request dataclasses: properties added after
+ * the legacy API become keyword-only with defaults, so existing positional construction
+ * keeps binding the original parameters. Required fields stay constructor arguments.
+ */
+export function applyPythonLegacyParameters(
+    code: string,
+    definitions: Record<string, unknown>
+): string {
+    const emitted = new Set([...code.matchAll(/^class (\w+)[:(]/gm)].map((match) => match[1]));
+    const handled = new Set<string>();
+    for (const [definitionName, schema] of Object.entries(definitions)) {
+        const legacy = readLegacyParameters(schema, definitionName, { implicit: ["sessionId"] });
+        if (!legacy) continue;
+        const className = pythonAcronymCandidates(definitionName).find((candidate) => emitted.has(candidate));
+        if (!className) throw new Error(`Missing dataclass for ${definitionName}`);
+        if (handled.has(className)) continue;
+        handled.add(className);
+        for (const addition of legacy.additions) {
+            code = makePythonDataclassFieldKeywordOnly(code, className, toSnakeCase(addition));
+        }
+    }
+    return code;
+}
+
+function makePythonDataclassFieldKeywordOnly(
+    code: string,
+    className: string,
+    fieldName: string
+): string {
+    const classPattern = new RegExp(
+        `(@dataclass\\r?\\nclass ${escapeRegExp(className)}:[\\s\\S]*?)(?=^@dataclass|^class\\s+\\w|^def\\s+\\w|(?![\\s\\S]))`,
+        "gm"
+    );
+    let foundClass = false;
+    const updated = code.replace(classPattern, (block: string) => {
+        foundClass = true;
+        const fieldPattern = new RegExp(
+            `^(    ${escapeRegExp(fieldName)}: .+) = None$`,
+            "m"
+        );
+        if (!fieldPattern.test(block)) {
+            throw new Error(`Missing optional field ${className}.${fieldName}`);
+        }
+        let updatedBlock = block.replace(fieldPattern, "$1 = field(default=None, kw_only=True)");
+
+        const constructorPattern = new RegExp(
+            `^(        return ${escapeRegExp(className)}\\()([^\\n]*)(\\))$`,
+            "m"
+        );
+        let foundConstructor = false;
+        updatedBlock = updatedBlock.replace(
+            constructorPattern,
+            (_match: string, prefix: string, args: string, suffix: string) => {
+                foundConstructor = true;
+                const constructorArgs = args.split(", ");
+                const fieldIndex = constructorArgs.indexOf(fieldName);
+                if (fieldIndex < 0) {
+                    throw new Error(`Missing constructor argument ${className}.${fieldName}`);
+                }
+                constructorArgs.splice(fieldIndex, 1);
+                constructorArgs.push(`${fieldName}=${fieldName}`);
+                return `${prefix}${constructorArgs.join(", ")}${suffix}`;
+            }
+        );
+        if (!foundConstructor) {
+            throw new Error(`Missing from_dict constructor for ${className}`);
+        }
+        return updatedBlock;
+    });
+    if (!foundClass) {
+        throw new Error(`Missing dataclass ${className}`);
+    }
+    return updated;
+}
+
 function reorderPythonDataclassFields(code: string): string {
     const fieldRe =
         /^    \w+: (?:Any|bool|int|float|str|dict|list|ClassVar|[A-Z_]\w*|['"][A-Z_]\w*)(?:[^=]*)?(?: = .*)?$/;
@@ -1528,6 +1664,10 @@ function getMethodParamsSchema(method: RpcMethod): JSONSchema7 | undefined {
 }
 
 function pythonResultTypeName(method: RpcMethod, schemaOverride?: JSONSchema7): string {
+    // Session-scoped methods retain their existing method-specific result names.
+    if (!schemaOverride && !method.rpcMethod.startsWith("session.") && method.result?.$ref) {
+        return toPascalCase(refTypeName(method.result.$ref, rpcDefinitions));
+    }
     const schema = schemaOverride ?? getMethodResultSchema(method);
     // If schema is a $ref, derive the type name from the ref path
     if (schema?.$ref) {
@@ -1554,6 +1694,9 @@ function pythonParamsTypeName(method: RpcMethod): string {
     const fallback = pythonRequestFallbackName(method);
     if (method.rpcMethod.startsWith("session.") && method.params?.$ref) {
         return fallback;
+    }
+    if (method.params?.$ref) {
+        return toPascalCase(refTypeName(method.params.$ref, rpcDefinitions));
     }
     const schema = getMethodParamsSchema(method);
     if (schema?.$ref) return toPascalCase(refTypeName(schema.$ref, rpcDefinitions));
@@ -2628,6 +2771,26 @@ export function generatePythonSessionEventsCode(schema: JSONSchema7): string {
     };
 
     for (const variant of variants) {
+        const unionMembers = variant.dataSchema.anyOf ?? variant.dataSchema.oneOf;
+        if (unionMembers) {
+            const members = unionMembers
+                .filter((member): member is JSONSchema7 => typeof member === "object")
+                .map((member) => resolveObjectSchema(member, ctx.definitions) ?? member)
+                .filter((member) => !isPyNullLikeSchema(member));
+            const discriminator = findPyDiscriminator(members);
+            if (!discriminator) {
+                throw new Error(`Cannot represent event payload union "${variant.dataClassName}" without a discriminator`);
+            }
+            emitPyFlatDiscriminatedUnion(
+                variant.dataClassName,
+                discriminator.property,
+                discriminator.mapping,
+                ctx,
+                variant.dataDescription,
+                variant.dataExperimental
+            );
+            continue;
+        }
         emitPyClass(
             variant.dataClassName,
             variant.dataSchema,
@@ -3087,6 +3250,10 @@ async function generateRpc(schemaPath?: string, sessionEventsSchema?: JSONSchema
     };
     const externalRefs = rewriteExternalRefsForPython(singleSchema as JSONSchema7 & { definitions?: Record<string, JSONSchema7> });
     const externalEnumNames = collectPythonExternalEnumNames(sessionEventsSchema, externalRefs.placeholderNames);
+    const externalDiscriminatedUnionNames = collectPythonExternalDiscriminatedUnionNames(
+        sessionEventsSchema,
+        externalRefs.placeholderNames
+    );
     const externalUnionAliases = collectExternalUnionAliasesForPython(
         singleSchema.definitions as Record<string, JSONSchema7>,
         externalRefs.placeholderNames
@@ -3138,12 +3305,23 @@ async function generateRpc(schemaPath?: string, sessionEventsSchema?: JSONSchema
     const knownDefNames = new Set(Object.keys(allDefinitions).map((n) => n.toLowerCase()));
     typesCode = collapsePlaceholderPythonDataclasses(typesCode, knownDefNames);
     typesCode = postProcessExternalUnionAliasesForPython(typesCode, externalUnionAliases);
-    typesCode = postProcessExternalRefsForPython(typesCode, externalRefs.placeholderNames, externalEnumNames);
+    typesCode = postProcessExternalRefsForPython(
+        typesCode,
+        externalRefs.placeholderNames,
+        externalEnumNames,
+        externalDiscriminatedUnionNames
+    );
     typesCode = removeShadowedSessionEventEnumsForPython(
         typesCode,
         externalRefs.imports.get(".session_events") ?? new Set<string>(),
         sessionEventsSchema
     );
+    const sessionEventImports = externalRefs.imports.get(".session_events");
+    if (sessionEventImports) {
+        for (const unionName of externalDiscriminatedUnionNames) {
+            sessionEventImports.add(`_load_${unionName}`);
+        }
+    }
     const { code: typesCodeAfterUnions, unions: refBasedUnions } = postProcessRefBasedDiscriminatedUnionsForPython(
         typesCode,
         allDefinitions,
@@ -3171,6 +3349,12 @@ async function generateRpc(schemaPath?: string, sessionEventsSchema?: JSONSchema
     // Reorder class/enum definitions to resolve forward references.
     // Quicktype may emit classes before their dependencies are defined.
     typesCode = reorderPythonForwardRefs(typesCode);
+    typesCode = makePythonDataclassFieldKeywordOnly(
+        typesCode,
+        "MCPServerConfigHTTP",
+        "oauth_scopes"
+    );
+    typesCode = applyPythonLegacyParameters(typesCode, allDefinitions);
 
     // Strip quicktype's import block and preamble — we provide our own unified header.
     // The preamble ends just before the first helper function (e.g. "def from_str")
@@ -3311,7 +3495,7 @@ if TYPE_CHECKING:
     from .._jsonrpc import JsonRpcClient
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Protocol, TypeVar, cast
@@ -3451,6 +3635,7 @@ def _patch_model_capabilities(data: dict) -> dict:
         }
     }
 
+    finalCode = appendPythonCompatibilityAliases(finalCode);
     finalCode = appendPythonRpcAllList(finalCode, rpcDefinitions);
 
     const outPath = await writeGeneratedFile("python/copilot/generated/rpc.py", finalCode);
@@ -3545,6 +3730,21 @@ function appendPythonRpcAllList(code: string, _definitions: { definitions: Recor
     }
 
     return code.replace(/\s*$/, "") + "\n\n" + renderPythonAllList([...exported].sort()) + "\n";
+}
+
+function appendPythonCompatibilityAliases(code: string): string {
+    const aliases: string[] = [];
+    if (/\bclass CatalogInstallability\b/.test(code) && !/\bclass CatalogCandidateInstallability\b/.test(code) && !/^CatalogCandidateInstallability\s*=/m.test(code)) {
+        aliases.push("CatalogCandidateInstallability = CatalogInstallability");
+    }
+    if (/\bclass CatalogMCPServerInstallability\b/.test(code) && !/\bclass CatalogMCPServerInstallabilityEnum\b/.test(code) && !/^CatalogMCPServerInstallabilityEnum\s*=/m.test(code)) {
+        aliases.push("CatalogMCPServerInstallabilityEnum = CatalogMCPServerInstallability");
+    }
+    if (/\bclass CatalogMCPServerInstallability\b/.test(code) && !/\bclass CatalogMcpServerInstallability\b/.test(code) && !/^CatalogMcpServerInstallability\s*=/m.test(code)) {
+        aliases.push("CatalogMcpServerInstallability = CatalogMCPServerInstallability");
+    }
+    if (aliases.length === 0) return code;
+    return `${code.replace(/\s*$/, "")}\n\n# Backward-compatible public aliases retained across typed-review generation.\n${aliases.join("\n")}\n`;
 }
 
 function renderPythonAllList(names: string[]): string {
@@ -3675,7 +3875,7 @@ function emitRpcWrapper(lines: string[], node: Record<string, unknown>, isSessio
     lines.push(``);
 }
 
-function emitMethod(lines: string[], name: string, method: RpcMethod, isSession: boolean, resolveType: (name: string) => string, groupExperimental = false, groupDeprecated = false): void {
+export function emitMethod(lines: string[], name: string, method: RpcMethod, isSession: boolean, resolveType: (name: string) => string, groupExperimental = false, groupDeprecated = false): void {
     const isInternal = method.visibility === "internal";
     const methodName = (isInternal ? "_" : "") + toSnakeCase(name);
     const resultSchema = getMethodResultSchema(method);
@@ -3733,7 +3933,7 @@ function emitMethod(lines: string[], name: string, method: RpcMethod, isSession:
                 ? `${innerTypeName}.from_dict(${expr}) if ${expr} is not None else None`
                 : `${innerTypeName}(${expr}) if ${expr} is not None else None`;
         }
-        return resultIsObject ? `${innerTypeName}.from_dict(${expr})` : `${innerTypeName}(${expr})`;
+        return resultIsObject && innerTypeName !== "dict" ? `${innerTypeName}.from_dict(${expr})` : `${innerTypeName}(${expr})`;
     };
 
     // Build request body with proper serialization/deserialization
@@ -3916,7 +4116,7 @@ function emitClientSessionRegistrationMethod(
     lines.push(`    client.set_request_handler("${method.rpcMethod}", ${handlerVariableName})`);
 }
 
-function emitClientGlobalApiRegistration(
+export function emitClientGlobalApiRegistration(
     lines: string[],
     node: Record<string, unknown>,
     resolveType: (name: string) => string
@@ -3997,7 +4197,7 @@ function emitClientGlobalRegistrationMethod(
         // notification path (an `id`-less message never reaches a request
         // handler), so register on the method-specific notification registry.
         lines.push(`    async def ${handlerVariableName}(params: dict) -> None:`);
-        lines.push(`        request = ${paramsType}.from_dict(params)`);
+        lines.push(`        request = ${paramsType === "dict" ? "dict(params)" : `${paramsType}.from_dict(params)`}`);
         lines.push(`        handler = handlers.${handlerField}`);
         lines.push(`        if handler is None: return None`);
         lines.push(`        await handler.${handlerMethod}(request)`);
@@ -4007,12 +4207,12 @@ function emitClientGlobalRegistrationMethod(
     }
 
     lines.push(`    async def ${handlerVariableName}(params: dict) -> dict | None:`);
-    lines.push(`        request = ${paramsType}.from_dict(params)`);
+    lines.push(`        request = ${paramsType === "dict" ? "dict(params)" : `${paramsType}.from_dict(params)`}`);
     lines.push(`        handler = handlers.${handlerField}`);
     lines.push(`        if handler is None: raise RuntimeError("No ${handlerField} client-global handler registered")`);
     if (hasResult) {
         lines.push(`        result = await handler.${handlerMethod}(request)`);
-        if (isObjectSchema(resultSchema)) {
+        if (isObjectSchema(resultSchema) && resolveType(pythonResultTypeName(method)) !== "dict") {
             lines.push(`        return result.to_dict()`);
         } else {
             lines.push(`        return result.value if hasattr(result, 'value') else result`);

@@ -26,6 +26,9 @@ from copilot import (
     CloudSessionRepository,
     CopilotClient,
     ExtensionInfo,
+    ExtensionLaunchProfile,
+    ExtensionLaunchProviderResolveRequest,
+    ExtensionLaunchProviderResolveResult,
     OpenCanvasInstance,
     RemoteSessionMode,
     RuntimeConnection,
@@ -85,6 +88,8 @@ const fs = require("fs");
 const captureIndex = process.argv.indexOf("--capture-file");
 const captureFile = captureIndex >= 0 ? process.argv[captureIndex + 1] : undefined;
 const requests = [];
+const clientResponses = [];
+let extensionRegistrationId;
 
 function saveCapture() {
   if (!captureFile) {
@@ -94,9 +99,11 @@ function saveCapture() {
     args: process.argv.slice(2),
     cwd: process.cwd(),
     requests,
+    clientResponses,
     env: {
       COPILOT_HOME: process.env.COPILOT_HOME,
       COPILOT_SDK_AUTH_TOKEN: process.env.COPILOT_SDK_AUTH_TOKEN,
+      COPILOT_RUNTIME_PROCESS_FILE_LOGGING: process.env.COPILOT_RUNTIME_PROCESS_FILE_LOGGING,
       COPILOT_OTEL_ENABLED: process.env.COPILOT_OTEL_ENABLED,
       OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_PROTOCOL: process.env.OTEL_EXPORTER_OTLP_PROTOCOL,
@@ -139,6 +146,15 @@ function handleMessage(message) {
   if (!Object.prototype.hasOwnProperty.call(message, "id")) {
     return;
   }
+  if (!message.method) {
+    clientResponses.push(message);
+    saveCapture();
+    if (message.id === 9001 && extensionRegistrationId !== undefined) {
+      writeResponse(extensionRegistrationId, {});
+      extensionRegistrationId = undefined;
+    }
+    return;
+  }
   requests.push({ method: message.method, params: message.params });
   saveCapture();
   if (message.method === "connect") {
@@ -147,6 +163,16 @@ function handleMessage(message) {
   }
   if (message.method === "ping") {
     writeResponse(message.id, { message: "pong", protocolVersion: 3, timestamp: Date.now() });
+    return;
+  }
+  if (message.method === "registerExtensionLaunchProvider") {
+    extensionRegistrationId = message.id;
+    writeRequest(9001, "extensionLaunchProvider.resolve", {
+      id: "project:python-e2e",
+      name: "python-e2e",
+      modulePath: "/extensions/python-e2e.py",
+      source: "project",
+    });
     return;
   }
   if (message.method === "session.create") {
@@ -177,6 +203,11 @@ function handleMessage(message) {
 
 function writeResponse(id, result) {
   const body = JSON.stringify({ jsonrpc: "2.0", id, result });
+  process.stdout.write(`Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`);
+}
+
+function writeRequest(id, method, params) {
+  const body = JSON.stringify({ jsonrpc: "2.0", id, method, params });
   process.stdout.write(`Content-Length: ${Buffer.byteLength(body, "utf8")}\r\n\r\n${body}`);
 }
 """
@@ -246,7 +277,11 @@ class TestClientOptions:
                 cli_path=cli_path,
                 base_directory=copilot_home_from_option,
                 cli_args=["--capture-file", capture_path],
-                env={**ctx.get_env(), "COPILOT_HOME": copilot_home_from_env},
+                env={
+                    **ctx.get_env(),
+                    "COPILOT_HOME": copilot_home_from_env,
+                    "COPILOT_RUNTIME_PROCESS_FILE_LOGGING": "0",
+                },
                 github_token="process-option-token",
                 log_level="debug",
                 session_idle_timeout_seconds=17,
@@ -279,6 +314,7 @@ class TestClientOptions:
 
             assert env["COPILOT_HOME"] == copilot_home_from_option
             assert env["COPILOT_SDK_AUTH_TOKEN"] == "process-option-token"
+            assert env["COPILOT_RUNTIME_PROCESS_FILE_LOGGING"] == "1"
             assert env["COPILOT_OTEL_ENABLED"] == "true"
             assert env["OTEL_EXPORTER_OTLP_ENDPOINT"] == "http://127.0.0.1:4318"
             assert env["OTEL_EXPORTER_OTLP_PROTOCOL"] == "http/protobuf"
@@ -329,6 +365,68 @@ class TestClientOptions:
             except Exception:
                 await client.force_stop()
 
+    async def test_should_register_and_invoke_extension_launch_provider(self, ctx: E2ETestContext):
+        cli_path = os.path.join(ctx.work_dir, "fake-cli-extension-provider.js")
+        capture_path = os.path.join(ctx.work_dir, "fake-cli-extension-provider-capture.json")
+        with open(cli_path, "w") as f:
+            f.write(FAKE_STDIO_CLI_SCRIPT)
+
+        class RecordingProvider:
+            request: ExtensionLaunchProviderResolveRequest | None = None
+
+            async def resolve(
+                self, params: ExtensionLaunchProviderResolveRequest
+            ) -> ExtensionLaunchProviderResolveResult:
+                self.request = params
+                return ExtensionLaunchProviderResolveResult(
+                    launch=ExtensionLaunchProfile(
+                        executable="python",
+                        args=["extension-host"],
+                        env={"EXTENSION_SOURCE": "python"},
+                    )
+                )
+
+        provider = RecordingProvider()
+        client = CopilotClient(
+            **_make_options(
+                ctx,
+                cli_path=cli_path,
+                cli_args=["--capture-file", capture_path],
+                extension_launch_provider=provider,
+                github_token=None,
+                use_logged_in_user=False,
+            )
+        )
+        try:
+            await client.start()
+
+            assert provider.request is not None
+            assert provider.request.id == "project:python-e2e"
+            assert provider.request.name == "python-e2e"
+            assert provider.request.module_path == "/extensions/python-e2e.py"
+            assert provider.request.source.value == "project"
+
+            with open(capture_path) as f:
+                capture = json.load(f)
+            assert "registerExtensionLaunchProvider" in [
+                request["method"] for request in capture["requests"]
+            ]
+            assert capture["clientResponses"] == [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 9001,
+                    "result": {
+                        "launch": {
+                            "executable": "python",
+                            "args": ["extension-host"],
+                            "env": {"EXTENSION_SOURCE": "python"},
+                        }
+                    },
+                }
+            ]
+        finally:
+            await client.force_stop()
+
     async def test_should_send_empty_mode_custom_agent_locality_defaults(self, ctx: E2ETestContext):
         cli_path = os.path.join(ctx.work_dir, "fake-cli-empty.js")
         capture_path = os.path.join(ctx.work_dir, "fake-cli-empty-capture.json")
@@ -342,6 +440,7 @@ class TestClientOptions:
                 cli_args=["--capture-file", capture_path],
                 mode="empty",
                 base_directory=ctx.work_dir,
+                env={**ctx.get_env(), "COPILOT_RUNTIME_PROCESS_FILE_LOGGING": "0"},
                 use_logged_in_user=False,
             ),
         )
@@ -361,6 +460,7 @@ class TestClientOptions:
             try:
                 with open(capture_path) as f:
                     capture = json.load(f)
+                assert capture["env"]["COPILOT_RUNTIME_PROCESS_FILE_LOGGING"] == "0"
                 create_request = next(
                     r for r in capture["requests"] if r["method"] == "session.create"
                 )
