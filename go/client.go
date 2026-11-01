@@ -1065,7 +1065,9 @@ func (c *Client) createSession(ctx context.Context, config *SessionConfig, runti
 	req.ModelCapabilities = config.ModelCapabilities
 	req.WorkingDirectory = config.WorkingDirectory
 	req.AdditionalDirectories = config.AdditionalDirectories
-	req.MCPServers = config.MCPServers
+	if config.MCPServers != nil {
+		req.MCPServers = &config.MCPServers
+	}
 	req.Diagnostics = config.Diagnostics
 	req.MCPOAuthTokenStorage = config.MCPOAuthTokenStorage
 	req.AuthClientIDMetadataURL = config.AuthClientIDMetadataURL
@@ -1571,7 +1573,9 @@ func (c *Client) resumeSession(ctx context.Context, sessionID string, config *Re
 	}
 	req.ContinuePendingWork = config.ContinuePendingWork
 	req.AllowTranscriptRecovery = config.AllowTranscriptRecovery
-	req.MCPServers = config.MCPServers
+	if config.MCPServers != nil {
+		req.MCPServers = &config.MCPServers
+	}
 	req.Diagnostics = config.Diagnostics
 	req.MCPOAuthTokenStorage = config.MCPOAuthTokenStorage
 	req.AuthClientIDMetadataURL = config.AuthClientIDMetadataURL

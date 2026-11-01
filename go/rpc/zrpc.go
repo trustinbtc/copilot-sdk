@@ -27878,7 +27878,8 @@ type WorkspacesStatFileResult struct {
 // Experimental: WorkspacesTruncateSummariesRequest is part of an experimental API and may
 // change or be removed.
 type WorkspacesTruncateSummariesRequest struct {
-	// Number of newest summaries to keep.
+	// Highest checkpoint number to keep. Checkpoints 1 through keepCount (the oldest) are kept
+	// and every later checkpoint is deleted; 0 deletes all.
 	KeepCount int64 `json:"keepCount"`
 }
 

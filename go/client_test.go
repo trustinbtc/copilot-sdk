@@ -3057,6 +3057,75 @@ func TestSessionRequests_PluginDirectoriesAndLargeOutput(t *testing.T) {
 	})
 }
 
+func TestClient_ForwardsMCPServersPresenceToSessionRequests(t *testing.T) {
+	tests := []struct {
+		name    string
+		servers map[string]MCPServerConfig
+		want    any
+	}{
+		{"omitted", nil, nil},
+		// An explicitly empty map must reach the runtime: on resume it replaces the
+		// session's servers with none, which omitting the key cannot express.
+		{"empty", map[string]MCPServerConfig{}, map[string]any{}},
+		{"one server", map[string]MCPServerConfig{
+			"local": MCPStdioServerConfig{Command: "echo", Tools: []string{"*"}},
+		}, map[string]any{"local": map[string]any{"type": "stdio", "command": "echo", "tools": []any{"*"}}}},
+	}
+
+	assertMCPServers := func(t *testing.T, params json.RawMessage, want any) {
+		t.Helper()
+		var m map[string]any
+		if err := json.Unmarshal(params, &m); err != nil {
+			t.Fatalf("Failed to unmarshal: %v", err)
+		}
+		got, ok := m["mcpServers"]
+		if want == nil {
+			if ok {
+				t.Errorf("Expected mcpServers to be omitted, got %v", got)
+			}
+			return
+		}
+		if !ok || !reflect.DeepEqual(got, want) {
+			t.Errorf("Expected mcpServers %v, got %v (present=%v)", want, got, ok)
+		}
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rpcClient, server, _ := newRuntimeShutdownRpcPair(t)
+			t.Cleanup(server.Stop)
+			client := &Client{
+				client:   rpcClient,
+				RPC:      rpc.NewServerRPC(rpcClient),
+				sessions: make(map[string]*Session),
+			}
+
+			createParams := make(chan json.RawMessage, 1)
+			server.SetRequestHandler("session.create", func(params json.RawMessage) (json.RawMessage, *jsonrpc2.Error) {
+				createParams <- append(json.RawMessage(nil), params...)
+				sessionID := sessionIDFromParams(t, params)
+				return []byte(`{"sessionId":"` + sessionID + `","workspacePath":"/workspace"}`), nil
+			})
+
+			if _, err := client.CreateSession(t.Context(), &SessionConfig{Model: "auto", MCPServers: tt.servers}); err != nil {
+				t.Fatalf("CreateSession failed: %v", err)
+			}
+			assertMCPServers(t, <-createParams, tt.want)
+
+			resumeParams := make(chan json.RawMessage, 1)
+			server.SetRequestHandler("session.resume", func(params json.RawMessage) (json.RawMessage, *jsonrpc2.Error) {
+				resumeParams <- append(json.RawMessage(nil), params...)
+				return []byte(`{"sessionId":"resumed-mcp","workspacePath":"/workspace"}`), nil
+			})
+
+			if _, err := client.ResumeSessionWithOptions(t.Context(), "resumed-mcp", &ResumeSessionConfig{Model: "auto", MCPServers: tt.servers}); err != nil {
+				t.Fatalf("ResumeSessionWithOptions failed: %v", err)
+			}
+			assertMCPServers(t, <-resumeParams, tt.want)
+		})
+	}
+}
+
 func TestSessionRequests_SandboxConfig(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		sandboxConfig := &rpc.SandboxConfig{

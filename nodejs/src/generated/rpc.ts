@@ -40658,7 +40658,7 @@ export interface WorkspacesStatFileResult {
 /** @experimental */
 export interface WorkspacesTruncateSummariesRequest {
   /**
-   * Number of newest summaries to keep.
+   * Highest checkpoint number to keep. Checkpoints 1 through keepCount (the oldest) are kept and every later checkpoint is deleted; 0 deletes all.
    */
   keepCount: number;
 }

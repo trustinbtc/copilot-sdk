@@ -178,8 +178,9 @@ type ClientOptions struct {
 	GitHubToken string
 	// UseLoggedInUser controls whether to use the logged-in user for
 	// authentication. When true, the runtime attempts to use stored OAuth
-	// tokens or gh CLI auth. When false, only explicit tokens (GitHubToken
-	// or environment variables) are used.
+	// tokens or gh CLI auth. When false, only explicit tokens such as
+	// GitHubToken are used; environment variable tokens (COPILOT_GITHUB_TOKEN,
+	// GH_TOKEN, GITHUB_TOKEN) are ignored.
 	// Default: true (but defaults to false when GitHubToken is provided).
 	UseLoggedInUser *bool
 	// OnListModels is a custom handler for listing available models.
@@ -3231,7 +3232,7 @@ type createSessionRequest struct {
 	Streaming                          *bool                                  `json:"streaming,omitempty"`
 	IncludeSubAgentStreamingEvents     *bool                                  `json:"includeSubAgentStreamingEvents,omitempty"`
 	EnableGitHubTelemetryForwarding    *bool                                  `json:"enableGitHubTelemetryForwarding,omitempty"`
-	MCPServers                         map[string]MCPServerConfig             `json:"mcpServers,omitempty"`
+	MCPServers                         *map[string]MCPServerConfig            `json:"mcpServers,omitempty"`
 	Diagnostics                        *rpc.DiagnosticsConfiguration          `json:"diagnostics,omitempty"`
 	MCPOAuthTokenStorage               string                                 `json:"mcpOAuthTokenStorage,omitempty"`
 	AuthClientIDMetadataURL            string                                 `json:"authClientIdMetadataUrl,omitempty"`
@@ -3356,7 +3357,7 @@ type resumeSessionRequest struct {
 	Streaming                          *bool                                  `json:"streaming,omitempty"`
 	IncludeSubAgentStreamingEvents     *bool                                  `json:"includeSubAgentStreamingEvents,omitempty"`
 	EnableGitHubTelemetryForwarding    *bool                                  `json:"enableGitHubTelemetryForwarding,omitempty"`
-	MCPServers                         map[string]MCPServerConfig             `json:"mcpServers,omitempty"`
+	MCPServers                         *map[string]MCPServerConfig            `json:"mcpServers,omitempty"`
 	Diagnostics                        *rpc.DiagnosticsConfiguration          `json:"diagnostics,omitempty"`
 	MCPOAuthTokenStorage               string                                 `json:"mcpOAuthTokenStorage,omitempty"`
 	AuthClientIDMetadataURL            string                                 `json:"authClientIdMetadataUrl,omitempty"`

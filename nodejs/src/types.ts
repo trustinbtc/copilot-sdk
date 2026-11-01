@@ -527,7 +527,8 @@ export interface CopilotClientOptions {
     /**
      * Whether to use the logged-in user for authentication.
      * When true, the runtime will attempt to use stored OAuth tokens or gh CLI auth.
-     * When false, only explicit tokens (gitHubToken or environment variables) are used.
+     * When false, only explicit tokens such as gitHubToken are used; environment variable
+     * tokens (COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN) are ignored.
      * @default true (but defaults to false when gitHubToken is provided)
      */
     useLoggedInUser?: boolean;

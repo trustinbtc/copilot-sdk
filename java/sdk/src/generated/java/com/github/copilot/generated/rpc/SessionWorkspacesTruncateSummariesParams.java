@@ -26,7 +26,7 @@ import javax.annotation.processing.Generated;
 public record SessionWorkspacesTruncateSummariesParams(
     /** Target session identifier */
     @JsonProperty("sessionId") String sessionId,
-    /** Number of newest summaries to keep. */
+    /** Highest checkpoint number to keep. Checkpoints 1 through keepCount (the oldest) are kept and every later checkpoint is deleted; 0 deletes all. */
     @JsonProperty("keepCount") Long keepCount
 ) {
 }

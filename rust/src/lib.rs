@@ -364,7 +364,10 @@ pub struct ClientOptions {
     pub github_token: Option<String>,
     /// Whether the CLI should fall back to the logged-in `gh` user when no
     /// token is provided. `None` means use the runtime default (true unless
-    /// [`Self::github_token`] is set, in which case false).
+    /// [`Self::github_token`] is set, in which case false). When false, only
+    /// explicit tokens such as [`Self::github_token`] are used; environment
+    /// variable tokens (`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`)
+    /// are ignored.
     pub use_logged_in_user: Option<bool>,
     /// Log level passed to the CLI server via `--log-level`. When `None`,
     /// the SDK does not pass `--log-level` to the runtime at all and the

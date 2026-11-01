@@ -2099,7 +2099,7 @@ pub struct WorkspacesStatFileResult {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspacesTruncateSummariesRequest {
-    /// Number of newest summaries to keep.
+    /// Highest checkpoint number to keep. Checkpoints 1 through keepCount (the oldest) are kept and every later checkpoint is deleted; 0 deletes all.
     pub keep_count: i64,
 }
 

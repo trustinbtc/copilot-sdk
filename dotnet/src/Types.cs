@@ -498,7 +498,8 @@ public sealed class CopilotClientOptions
     /// <summary>
     /// Whether to use the logged-in user for authentication.
     /// When true, the runtime will attempt to use stored OAuth tokens or gh CLI auth.
-    /// When false, only explicit tokens (GitHubToken or environment variables) are used.
+    /// When false, only explicit tokens such as GitHubToken are used; environment variable
+    /// tokens (COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN) are ignored.
     /// Default: true (but defaults to false when GitHubToken is provided).
     /// </summary>
     public bool? UseLoggedInUser { get; set; }

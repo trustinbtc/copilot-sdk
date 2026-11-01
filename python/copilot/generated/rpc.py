@@ -24388,7 +24388,9 @@ class WorkspacesTruncateSummariesRequest:
     """Rollback point for local workspace summaries."""
 
     keep_count: int
-    """Number of newest summaries to keep."""
+    """Highest checkpoint number to keep. Checkpoints 1 through keepCount (the oldest) are kept
+    and every later checkpoint is deleted; 0 deletes all.
+    """
 
     @staticmethod
     def from_dict(obj: Any) -> 'WorkspacesTruncateSummariesRequest':

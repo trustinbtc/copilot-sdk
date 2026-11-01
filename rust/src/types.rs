@@ -4259,8 +4259,11 @@ pub struct ResumeSessionConfig {
     /// [`ClientOptions::session_fs`](crate::ClientOptions::session_fs).
     /// See [`SessionConfig::session_fs_provider`].
     pub session_fs_provider: Option<Arc<dyn SessionFsProvider>>,
-    /// Force-fail resume if the session does not exist on disk, instead of
-    /// silently starting a new session. Wire field name stays `disableResume`.
+    /// When `true`, the runtime does not emit the `session.resume` event for
+    /// this resume. Useful for reconnecting to a session without triggering
+    /// resume-related side effects. Most callers should leave this unset
+    /// (the default, same as `false`) to receive the resume notification.
+    /// Wire field name stays `disableResume`.
     pub suppress_resume_event: Option<bool>,
     /// When `true`, instructs the runtime to continue any tool calls or
     /// permission requests that were pending when the previous connection
@@ -5379,8 +5382,8 @@ impl ResumeSessionConfig {
         self
     }
 
-    /// Force-fail resume if the session does not exist on disk, instead
-    /// of silently starting a new session.
+    /// Skip the `session.resume` event for this resume when `suppress` is
+    /// `true`. See [`Self::suppress_resume_event`].
     pub fn with_suppress_resume_event(mut self, suppress: bool) -> Self {
         self.suppress_resume_event = Some(suppress);
         self

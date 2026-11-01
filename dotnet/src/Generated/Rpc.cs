@@ -21259,7 +21259,7 @@ internal sealed class WorkspacesAddSummaryRequest
 [Experimental(global::GitHub.Copilot.Diagnostics.Experimental)]
 internal sealed class WorkspacesTruncateSummariesRequest
 {
-    /// <summary>Number of newest summaries to keep.</summary>
+    /// <summary>Highest checkpoint number to keep. Checkpoints 1 through keepCount (the oldest) are kept and every later checkpoint is deleted; 0 deletes all.</summary>
     [JsonPropertyName("keepCount")]
     public long KeepCount { get; set; }
 
@@ -59594,7 +59594,7 @@ public sealed class WorkspacesApi
     }
 
     /// <summary>Truncates local workspace compaction summaries after a rollback.</summary>
-    /// <param name="keepCount">Number of newest summaries to keep.</param>
+    /// <param name="keepCount">Highest checkpoint number to keep. Checkpoints 1 through keepCount (the oldest) are kept and every later checkpoint is deleted; 0 deletes all.</param>
     /// <param name="cancellationToken">The <see cref="CancellationToken"/> to monitor for cancellation requests. The default is <see cref="CancellationToken.None"/>.</param>
     /// <returns>Current workspace metadata for the session, including its absolute filesystem path when available.</returns>
     public async Task<WorkspacesGetWorkspaceResult> TruncateSummariesAsync(long keepCount, CancellationToken cancellationToken = default)

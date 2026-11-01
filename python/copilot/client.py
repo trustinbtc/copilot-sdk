@@ -1821,7 +1821,10 @@ class CopilotClient:
                 sessions can be created.
             use_logged_in_user: Use the logged-in user for authentication.
                 ``None`` (default) resolves to ``True`` unless ``github_token``
-                is set.
+                is set. When ``False``, only explicit tokens such as
+                ``github_token`` are used; environment variable tokens
+                (``COPILOT_GITHUB_TOKEN``, ``GH_TOKEN``, ``GITHUB_TOKEN``) are
+                ignored.
             telemetry: OpenTelemetry configuration. Providing this enables
                 telemetry.
             session_fs: Connection-level session filesystem provider
@@ -3132,7 +3135,7 @@ class CopilotClient:
             payload["modelCapabilities"] = _capabilities_to_dict(model_capabilities)
 
         # Add MCP servers configuration if provided
-        if mcp_servers:
+        if mcp_servers is not None:
             payload["mcpServers"] = _mcp_servers_to_wire(mcp_servers)
         if diagnostics is not None:
             payload["diagnostics"] = diagnostics.to_dict()
@@ -4077,7 +4080,7 @@ class CopilotClient:
         if suppress_resume_event is not None:
             payload["disableResume"] = suppress_resume_event
 
-        if mcp_servers:
+        if mcp_servers is not None:
             payload["mcpServers"] = _mcp_servers_to_wire(mcp_servers)
         if diagnostics is not None:
             payload["diagnostics"] = diagnostics.to_dict()
